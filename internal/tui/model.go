@@ -10,6 +10,12 @@ const (
 	paneRight  pane = 2
 )
 
+// cmdResultMsg carries the result of an async command execution back to Update.
+type cmdResultMsg struct {
+	output string
+	err    error
+}
+
 // Model is the single source of truth for the entire TUI.
 type Model struct {
 	width  int
@@ -21,6 +27,10 @@ type Model struct {
 
 	domains  []Domain
 	quitting bool
+
+	output  string // last command output to display in right pane
+	cmdErr  string // last command error message
+	running bool   // true while a command is executing
 }
 
 // New returns a freshly initialized Model with placeholder data.

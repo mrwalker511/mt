@@ -8,55 +8,57 @@ type Domain struct {
 
 // Target is a single actionable item within a domain.
 type Target struct {
-	Name   string
-	Status string // displayed in the right info pane
+	Name      string
+	Status    string   // static hint shown before any execution
+	Cmd       []string // shell command to run on Enter; nil = not configured
+	LaunchMsg string   // shown when Cmd succeeds but produces no output (e.g. open -a)
 }
 
 var initialDomains = []Domain{
 	{
 		Name: "App Launch",
 		Targets: []Target{
-			{Name: "Microsoft Word", Status: "App Status: Closed\n\nPress [Enter] to launch\nPress [N] for new doc"},
-			{Name: "Microsoft Excel", Status: "App Status: Closed\n\nPress [Enter] to launch"},
-			{Name: "Notes", Status: "App Status: Running\n\nPress [Enter] to focus"},
-			{Name: "Safari", Status: "Press [Enter] to open"},
-			{Name: "Terminal", Status: "Press [Enter] to open new terminal"},
+			{Name: "Microsoft Word",  Status: "App Status: Closed\n\nPress [Enter] to launch", Cmd: []string{"open", "-a", "Microsoft Word"},  LaunchMsg: "Launching Microsoft Word…"},
+			{Name: "Microsoft Excel", Status: "App Status: Closed\n\nPress [Enter] to launch", Cmd: []string{"open", "-a", "Microsoft Excel"}, LaunchMsg: "Launching Microsoft Excel…"},
+			{Name: "Notes",           Status: "Press [Enter] to open",                         Cmd: []string{"open", "-a", "Notes"},           LaunchMsg: "Opening Notes…"},
+			{Name: "Safari",          Status: "Press [Enter] to open",                         Cmd: []string{"open", "-a", "Safari"},          LaunchMsg: "Opening Safari…"},
+			{Name: "Terminal",        Status: "Press [Enter] to open new terminal",            Cmd: []string{"open", "-a", "Terminal"},        LaunchMsg: "Opening Terminal…"},
 		},
 	},
 	{
 		Name: "Dev Tools",
 		Targets: []Target{
-			{Name: "VS Code", Status: "Press [Enter] to open editor"},
-			{Name: "iTerm2", Status: "Press [Enter] to open terminal"},
-			{Name: "Postman", Status: "Press [Enter] to open Postman"},
-			{Name: "TablePlus", Status: "Press [Enter] to open TablePlus"},
+			{Name: "VS Code",   Status: "Press [Enter] to open editor",   Cmd: []string{"open", "-a", "Visual Studio Code"}, LaunchMsg: "Opening VS Code…"},
+			{Name: "iTerm2",    Status: "Press [Enter] to open terminal",  Cmd: []string{"open", "-a", "iTerm"},             LaunchMsg: "Opening iTerm2…"},
+			{Name: "Postman",   Status: "Press [Enter] to open Postman",   Cmd: []string{"open", "-a", "Postman"},           LaunchMsg: "Opening Postman…"},
+			{Name: "TablePlus", Status: "Press [Enter] to open TablePlus", Cmd: []string{"open", "-a", "TablePlus"},         LaunchMsg: "Opening TablePlus…"},
 		},
 	},
 	{
 		Name: "Infrastructure",
 		Targets: []Target{
-			{Name: "Docker Up", Status: "Docker: Stopped\n\nPress [Enter] to start containers"},
-			{Name: "Docker Down", Status: "Press [Enter] to stop all containers"},
-			{Name: "Postgres", Status: "Container: postgres-pgvector\nStatus: unknown"},
-			{Name: "Redis", Status: "Container: redis\nStatus: unknown"},
+			{Name: "Docker Up",   Status: "Docker: Stopped\n\nPress [Enter] to start containers", Cmd: []string{"docker", "compose", "up", "-d"}},
+			{Name: "Docker Down", Status: "Press [Enter] to stop all containers",                 Cmd: []string{"docker", "compose", "down"}},
+			{Name: "Postgres",    Status: "Container: postgres\nPress [Enter] to check status",   Cmd: []string{"docker", "ps", "--filter", "name=postgres", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}},
+			{Name: "Redis",       Status: "Container: redis\nPress [Enter] to check status",      Cmd: []string{"docker", "ps", "--filter", "name=redis",    "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}},
 		},
 	},
 	{
 		Name: "RunLayer",
 		Targets: []Target{
-			{Name: "Deploy", Status: "Environment: staging\n\nPress [Enter] to deploy"},
-			{Name: "Status", Status: "Last deploy: unknown\n\nPress [Enter] to check"},
-			{Name: "Logs", Status: "Press [Enter] to stream logs"},
-			{Name: "Rollback", Status: "Press [Enter] to rollback last deploy"},
+			{Name: "Deploy",   Status: "Environment: staging\n\nConfigure deploy command in data.go"},
+			{Name: "Status",   Status: "Last deploy: unknown\n\nConfigure status command in data.go"},
+			{Name: "Logs",     Status: "Configure log command in data.go"},
+			{Name: "Rollback", Status: "Configure rollback command in data.go"},
 		},
 	},
 	{
 		Name: "Context/Git",
 		Targets: []Target{
-			{Name: "Git Status", Status: "Branch: unknown\n\nPress [Enter] to run git status"},
-			{Name: "Git Diff", Status: "Press [Enter] to view staged diff"},
-			{Name: "Branches", Status: "Press [Enter] to list branches"},
-			{Name: "Stash", Status: "Press [Enter] to manage stash"},
+			{Name: "Git Status", Status: "Press [Enter] to run git status",  Cmd: []string{"git", "status"}},
+			{Name: "Git Diff",   Status: "Press [Enter] to view diff",       Cmd: []string{"git", "diff"}},
+			{Name: "Branches",   Status: "Press [Enter] to list branches",   Cmd: []string{"git", "branch", "-a"}},
+			{Name: "Stash",      Status: "Press [Enter] to list stash",      Cmd: []string{"git", "stash", "list"}},
 		},
 	},
 }
