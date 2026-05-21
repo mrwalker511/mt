@@ -46,4 +46,7 @@ var (
 			Background(lipgloss.Color("#1C1C1C")).
 			Foreground(colorHelp).
 			Padding(0, 1)
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF5F5F"))
 )

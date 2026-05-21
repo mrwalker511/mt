@@ -75,13 +75,26 @@ func (m Model) renderRightPane(w, h int) string {
 	focused := m.activePane == paneRight
 	title   := titleStyle.Render("LIVE STATUS / INFO")
 
-	status := "Select a target to view status."
-	targets := m.domains[m.domainCursor].Targets
-	if len(targets) > 0 && m.targetCursor < len(targets) {
-		status = targets[m.targetCursor].Status
+	var text string
+	switch {
+	case m.running:
+		text = dimItemStyle.Render("Running…")
+	case m.cmdErr != "" && m.output != "":
+		text = normalItemStyle.Render(m.output) + "\n\n" + errorStyle.Render("Error: "+m.cmdErr)
+	case m.cmdErr != "":
+		text = errorStyle.Render("Error: " + m.cmdErr)
+	case m.output != "":
+		text = normalItemStyle.Render(m.output)
+	default:
+		status := "Select a target to view status."
+		targets := m.domains[m.domainCursor].Targets
+		if len(targets) > 0 && m.targetCursor < len(targets) {
+			status = targets[m.targetCursor].Status
+		}
+		text = normalItemStyle.Render(status)
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Left, title, normalItemStyle.Render(status))
+	content := lipgloss.JoinVertical(lipgloss.Left, title, text)
 	return paneStyle(focused).Width(w).Height(h).Render(content)
 }
 
