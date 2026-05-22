@@ -35,14 +35,20 @@ mt
 
 `mt` looks for a config file in order:
 
-1. `~/.config/mt/config.yaml`
-2. `./mt.yaml`
+1. System config dir — platform-dependent:
+   - **macOS:** `~/Library/Application Support/mt/config.yaml`
+   - **Linux:** `~/.config/mt/config.yaml`
+2. `./mt.yaml` (local override in current directory)
 
 If neither exists, built-in defaults are used (macOS app launchers, Docker, and Git targets).
 
 To get started with your own config:
 
 ```sh
+# macOS
+cp mt.yaml.example ~/Library/Application\ Support/mt/config.yaml
+
+# Linux
 cp mt.yaml.example ~/.config/mt/config.yaml
 ```
 

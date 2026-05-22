@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +24,26 @@ func key(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
+// testModel returns a known, filesystem-independent model for navigation tests.
+// It has 2 domains with 3 and 2 targets respectively.
+func testModel() Model {
+	return Model{
+		activePane: paneLeft,
+		liveStatus: make(map[string]string),
+		domains: []Domain{
+			{Name: "Domain A", Targets: []Target{
+				{Name: "T1", Status: "hint1"},
+				{Name: "T2", Status: "hint2"},
+				{Name: "T3", Status: "hint3"},
+			}},
+			{Name: "Domain B", Targets: []Target{
+				{Name: "T4", Status: "hint4"},
+				{Name: "T5", Status: "hint5"},
+			}},
+		},
+	}
+}
+
 // --- Model initialisation ---
 
 func TestNew_InitialState(t *testing.T) {
@@ -35,6 +56,9 @@ func TestNew_InitialState(t *testing.T) {
 	}
 	if m.domainCursor != 0 || m.targetCursor != 0 {
 		t.Error("expected cursors to start at 0")
+	}
+	if m.liveStatus == nil {
+		t.Error("expected liveStatus map to be initialized")
 	}
 }
 
@@ -95,12 +119,10 @@ func TestUpdate_PaneLeft(t *testing.T) {
 }
 
 func TestUpdate_PaneClampsAtBoundaries(t *testing.T) {
-	// can't go left of paneLeft
 	m := press(New(), key('h'))
 	if m.activePane != paneLeft {
 		t.Error("expected to stay at paneLeft")
 	}
-	// can't go right of paneRight
 	right := New()
 	right.activePane = paneRight
 	m = press(right, key('l'))
@@ -113,7 +135,7 @@ func TestUpdate_PaneClampsAtBoundaries(t *testing.T) {
 
 func TestUpdate_DomainDown(t *testing.T) {
 	for _, k := range []tea.KeyMsg{key('j'), {Type: tea.KeyDown}} {
-		m := press(New(), k)
+		m := press(testModel(), k)
 		if m.domainCursor != 1 {
 			t.Errorf("key %q: expected domainCursor=1, got %d", k, m.domainCursor)
 		}
@@ -128,8 +150,8 @@ func TestUpdate_DomainUp_AtTop_NoChange(t *testing.T) {
 }
 
 func TestUpdate_DomainChange_ResetsTargetCursor(t *testing.T) {
-	m := New()
-	m.targetCursor = 3
+	m := testModel()
+	m.targetCursor = 2
 	m = press(m, key('j'))
 	if m.targetCursor != 0 {
 		t.Errorf("expected targetCursor=0 after domain change, got %d", m.targetCursor)
@@ -137,7 +159,7 @@ func TestUpdate_DomainChange_ResetsTargetCursor(t *testing.T) {
 }
 
 func TestUpdate_DomainNavigation_ClearsOutput(t *testing.T) {
-	m := New()
+	m := testModel()
 	m.output = "stale output"
 	m.cmdErr = "stale error"
 	m = press(m, key('j'))
@@ -149,7 +171,7 @@ func TestUpdate_DomainNavigation_ClearsOutput(t *testing.T) {
 // --- Target cursor (middle pane) ---
 
 func TestUpdate_TargetDown(t *testing.T) {
-	m := New()
+	m := testModel()
 	m.activePane = paneMiddle
 	m = press(m, key('j'))
 	if m.targetCursor != 1 {
@@ -167,7 +189,7 @@ func TestUpdate_TargetUp_AtTop_NoChange(t *testing.T) {
 }
 
 func TestUpdate_TargetNavigation_ClearsOutput(t *testing.T) {
-	m := New()
+	m := testModel()
 	m.activePane = paneMiddle
 	m.output = "stale output"
 	m = press(m, key('j'))
@@ -180,9 +202,8 @@ func TestUpdate_TargetNavigation_ClearsOutput(t *testing.T) {
 
 func TestUpdate_Enter_NoCommand(t *testing.T) {
 	m := Model{
-		domains: []Domain{
-			{Name: "Test", Targets: []Target{{Name: "No Cmd", Status: "hint"}}},
-		},
+		domains:    []Domain{{Name: "Test", Targets: []Target{{Name: "No Cmd", Status: "hint"}}}},
+		liveStatus: make(map[string]string),
 	}
 	m, cmd := func() (Model, tea.Cmd) {
 		next, c := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -201,10 +222,9 @@ func TestUpdate_Enter_NoCommand(t *testing.T) {
 
 func TestUpdate_Enter_WhileRunning_IsNoop(t *testing.T) {
 	m := Model{
-		running: true,
-		domains: []Domain{
-			{Name: "Test", Targets: []Target{{Name: "Cmd", Cmd: []string{"echo", "hi"}}}},
-		},
+		running:    true,
+		liveStatus: make(map[string]string),
+		domains:    []Domain{{Name: "Test", Targets: []Target{{Name: "Cmd", Cmd: []string{"echo", "hi"}}}}},
 	}
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
@@ -214,9 +234,8 @@ func TestUpdate_Enter_WhileRunning_IsNoop(t *testing.T) {
 
 func TestUpdate_Enter_WithCommand_SetsRunning(t *testing.T) {
 	m := Model{
-		domains: []Domain{
-			{Name: "Test", Targets: []Target{{Name: "Cmd", Cmd: []string{"echo", "hi"}}}},
-		},
+		liveStatus: make(map[string]string),
+		domains:    []Domain{{Name: "Test", Targets: []Target{{Name: "Cmd", Cmd: []string{"echo", "hi"}}}}},
 	}
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got := next.(Model)
@@ -231,7 +250,7 @@ func TestUpdate_Enter_WithCommand_SetsRunning(t *testing.T) {
 // --- cmdResultMsg ---
 
 func TestUpdate_CmdResult_Success(t *testing.T) {
-	m := Model{running: true}
+	m := Model{running: true, liveStatus: make(map[string]string)}
 	m = send(m, cmdResultMsg{output: "  hello world  "})
 	if m.running {
 		t.Error("expected running=false after result")
@@ -245,7 +264,7 @@ func TestUpdate_CmdResult_Success(t *testing.T) {
 }
 
 func TestUpdate_CmdResult_Error(t *testing.T) {
-	m := Model{running: true}
+	m := Model{running: true, liveStatus: make(map[string]string)}
 	m = send(m, cmdResultMsg{output: "partial output", err: errors.New("exit status 1")})
 	if m.running {
 		t.Error("expected running=false after error result")
@@ -259,7 +278,7 @@ func TestUpdate_CmdResult_Error(t *testing.T) {
 }
 
 func TestUpdate_CmdResult_EmptyOutput(t *testing.T) {
-	m := Model{running: true}
+	m := Model{running: true, liveStatus: make(map[string]string)}
 	m = send(m, cmdResultMsg{output: "   "})
 	if m.output != "" {
 		t.Errorf("expected empty output after trimming, got %q", m.output)
@@ -289,5 +308,145 @@ func TestUpdate_Tick_ReturnsNewCmd(t *testing.T) {
 	_, cmd := m.Update(tickMsg{})
 	if cmd == nil {
 		t.Error("tickMsg should return a non-nil batch cmd for the next cycle")
+	}
+}
+
+// --- View() boundary states ---
+
+func TestView_Quitting(t *testing.T) {
+	m := Model{quitting: true, liveStatus: make(map[string]string)}
+	if got := m.View(); got != "" {
+		t.Errorf("expected empty string when quitting, got %q", got)
+	}
+}
+
+func TestView_Uninitialized(t *testing.T) {
+	m := Model{liveStatus: make(map[string]string)}
+	if got := m.View(); got != "Initializing…" {
+		t.Errorf("expected initializing message, got %q", got)
+	}
+}
+
+func TestView_TooNarrow(t *testing.T) {
+	m := Model{width: 30, height: 24, liveStatus: make(map[string]string)}
+	got := m.View()
+	if !strings.Contains(got, "narrow") {
+		t.Errorf("expected narrow message, got %q", got)
+	}
+}
+
+// --- domainLiveHeader ---
+
+func TestDomainLiveHeader_UnknownDomain(t *testing.T) {
+	m := testModel() // "Domain A", "Domain B" — no live-status mapping
+	if got := m.domainLiveHeader(); got != "" {
+		t.Errorf("expected empty for unknown domain, got %q", got)
+	}
+}
+
+func TestDomainLiveHeader_GitNoBranch(t *testing.T) {
+	m := Model{
+		domains:    []Domain{{Name: "Context/Git"}},
+		liveStatus: make(map[string]string),
+	}
+	if got := m.domainLiveHeader(); got != "" {
+		t.Errorf("expected empty when no branch data, got %q", got)
+	}
+}
+
+func TestDomainLiveHeader_GitBranchOnly(t *testing.T) {
+	m := Model{
+		domains:    []Domain{{Name: "Context/Git"}},
+		liveStatus: map[string]string{"git.branch": "main"},
+	}
+	got := m.domainLiveHeader()
+	if !strings.Contains(got, "main") {
+		t.Errorf("expected branch name in header, got %q", got)
+	}
+	if strings.Contains(got, "modified") {
+		t.Error("should not show dirty count when git.dirty is not set")
+	}
+}
+
+func TestDomainLiveHeader_GitBranchAndDirty(t *testing.T) {
+	m := Model{
+		domains:    []Domain{{Name: "Context/Git"}},
+		liveStatus: map[string]string{"git.branch": "feature/x", "git.dirty": "3 modified"},
+	}
+	got := m.domainLiveHeader()
+	if !strings.Contains(got, "feature/x") {
+		t.Errorf("expected branch in header, got %q", got)
+	}
+	if !strings.Contains(got, "3 modified") {
+		t.Errorf("expected dirty count in header, got %q", got)
+	}
+}
+
+func TestDomainLiveHeader_InfraNoData(t *testing.T) {
+	m := Model{
+		domains:    []Domain{{Name: "Infrastructure"}},
+		liveStatus: make(map[string]string),
+	}
+	if got := m.domainLiveHeader(); got != "" {
+		t.Errorf("expected empty when no docker data, got %q", got)
+	}
+}
+
+func TestDomainLiveHeader_InfraPostgresOnly(t *testing.T) {
+	m := Model{
+		domains:    []Domain{{Name: "Infrastructure"}},
+		liveStatus: map[string]string{"docker.postgres": "Up 2h"},
+	}
+	got := m.domainLiveHeader()
+	if !strings.Contains(got, "postgres: Up 2h") {
+		t.Errorf("expected postgres status in header, got %q", got)
+	}
+}
+
+func TestDomainLiveHeader_InfraBothServices(t *testing.T) {
+	m := Model{
+		domains: []Domain{{Name: "Infrastructure"}},
+		liveStatus: map[string]string{
+			"docker.postgres": "Up 2h",
+			"docker.redis":    "stopped",
+		},
+	}
+	got := m.domainLiveHeader()
+	if !strings.Contains(got, "postgres") || !strings.Contains(got, "redis") {
+		t.Errorf("expected both services in header, got %q", got)
+	}
+}
+
+func TestDomainLiveHeader_OutOfBounds(t *testing.T) {
+	m := Model{
+		domains:      []Domain{},
+		domainCursor: 0,
+		liveStatus:   make(map[string]string),
+	}
+	if got := m.domainLiveHeader(); got != "" {
+		t.Errorf("expected empty for out-of-bounds cursor, got %q", got)
+	}
+}
+
+// --- renderRightPane with live header ---
+
+func TestRenderRightPane_LiveHeaderShown(t *testing.T) {
+	m := Model{
+		domains:    []Domain{{Name: "Context/Git", Targets: []Target{{Name: "Git Status", Status: "hint"}}}},
+		liveStatus: map[string]string{"git.branch": "main"},
+	}
+	got := m.renderRightPane(40, 20)
+	if !strings.Contains(got, "main") {
+		t.Errorf("expected branch name in right pane output, got %q", got)
+	}
+}
+
+// --- targetNames bounds safety ---
+
+func TestTargetNames_EmptyDomains(t *testing.T) {
+	m := Model{domains: []Domain{}, liveStatus: make(map[string]string)}
+	names := m.targetNames()
+	if len(names) != 0 {
+		t.Errorf("expected empty slice for empty domains, got %v", names)
 	}
 }
