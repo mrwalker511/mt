@@ -87,9 +87,11 @@ func (m Model) renderRightPane(w, h int) string {
 		text = normalItemStyle.Render(m.output)
 	default:
 		status := "Select a target to view status."
-		targets := m.domains[m.domainCursor].Targets
-		if len(targets) > 0 && m.targetCursor < len(targets) {
-			status = targets[m.targetCursor].Status
+		if m.domainCursor < len(m.domains) {
+			targets := m.domains[m.domainCursor].Targets
+			if len(targets) > 0 && m.targetCursor < len(targets) {
+				status = targets[m.targetCursor].Status
+			}
 		}
 		text = normalItemStyle.Render(status)
 	}
@@ -176,6 +178,9 @@ func (m Model) domainNames() []string {
 }
 
 func (m Model) targetNames() []string {
+	if m.domainCursor >= len(m.domains) {
+		return []string{}
+	}
 	targets := m.domains[m.domainCursor].Targets
 	names := make([]string, len(targets))
 	for i, t := range targets {
