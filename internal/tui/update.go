@@ -31,9 +31,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.output = strings.TrimSpace(msg.output)
 		if msg.err != nil {
 			m.cmdErr = msg.err.Error()
+			if m.pendingTarget != "" {
+				m.runStates[m.pendingTarget] = runFailure
+			}
 		} else {
 			m.cmdErr = ""
+			if m.pendingTarget != "" {
+				m.runStates[m.pendingTarget] = runSuccess
+			}
 		}
+		m.pendingTarget = ""
 		return m, nil
 
 	case tea.KeyMsg:
@@ -41,6 +48,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
+
+		case "c":
+			m.output = ""
+			m.cmdErr = ""
 
 		case "enter":
 			if m.running {
@@ -51,6 +62,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.output = ""
 				m.cmdErr = "No command configured for this target."
 				return m, nil
+			}
+			if m.domainCursor < len(m.domains) {
+				m.pendingTarget = m.domains[m.domainCursor].Name + "/" + target.Name
 			}
 			m.running = true
 			m.output = ""

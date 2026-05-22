@@ -29,6 +29,15 @@ type statusUpdateMsg struct {
 	status string
 }
 
+// runResult records the outcome of the last execution of a target.
+type runResult int
+
+const (
+	runNone    runResult = 0
+	runSuccess runResult = 1
+	runFailure runResult = 2
+)
+
 // Model is the single source of truth for the entire TUI.
 type Model struct {
 	width  int
@@ -45,7 +54,9 @@ type Model struct {
 	cmdErr  string // last command error message
 	running bool   // true while a command is executing
 
-	liveStatus map[string]string // live probe results keyed by semantic name
+	liveStatus    map[string]string    // live probe results keyed by semantic name
+	runStates     map[string]runResult // last run outcome keyed by "DomainName/TargetName"
+	pendingTarget string               // key of the target currently executing
 }
 
 // New returns a freshly initialized Model. Domains are loaded from the user's
@@ -56,6 +67,7 @@ func New() Model {
 		domains:    domains,
 		activePane: paneLeft,
 		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
 	}
 	if err != nil {
 		m.output = "Config error: " + err.Error()
