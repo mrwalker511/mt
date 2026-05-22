@@ -1,6 +1,10 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 type pane int
 
@@ -14,6 +18,15 @@ const (
 type cmdResultMsg struct {
 	output string
 	err    error
+}
+
+// tickMsg fires on each polling interval.
+type tickMsg time.Time
+
+// statusUpdateMsg carries a single live-status value back to Update.
+type statusUpdateMsg struct {
+	key    string
+	status string
 }
 
 // Model is the single source of truth for the entire TUI.
@@ -31,6 +44,8 @@ type Model struct {
 	output  string // last command output to display in right pane
 	cmdErr  string // last command error message
 	running bool   // true while a command is executing
+
+	liveStatus map[string]string // live probe results keyed by semantic name
 }
 
 // New returns a freshly initialized Model. Domains are loaded from the user's
@@ -40,6 +55,7 @@ func New() Model {
 	m := Model{
 		domains:    domains,
 		activePane: paneLeft,
+		liveStatus: make(map[string]string),
 	}
 	if err != nil {
 		m.output = "Config error: " + err.Error()
@@ -48,6 +64,8 @@ func New() Model {
 	return m
 }
 
+// Init fires the initial status polls and starts the refresh tick.
 func (m Model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(tickCmd(), pollGit(), pollDocker())
 }
+

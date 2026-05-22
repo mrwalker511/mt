@@ -2,10 +2,14 @@ package tui
 
 import (
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+const pollInterval = 5 * time.Second
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -13,6 +17,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
+
+	case tickMsg:
+		return m, tea.Batch(tickCmd(), pollGit(), pollDocker())
+
+	case statusUpdateMsg:
+		m.liveStatus[msg.key] = msg.status
 		return m, nil
 
 	case cmdResultMsg:
@@ -103,6 +114,66 @@ func (m Model) currentTarget() (Target, bool) {
 		return Target{}, false
 	}
 	return targets[m.targetCursor], true
+}
+
+// tickCmd schedules the next status poll cycle.
+func tickCmd() tea.Cmd {
+	return tea.Tick(pollInterval, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+// pollGit batches all git probes.
+func pollGit() tea.Cmd {
+	return tea.Batch(pollGitBranch(), pollGitDirty())
+}
+
+func pollGitBranch() tea.Cmd {
+	return func() tea.Msg {
+		out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
+		if err != nil {
+			return statusUpdateMsg{key: "git.branch", status: ""}
+		}
+		return statusUpdateMsg{key: "git.branch", status: strings.TrimSpace(string(out))}
+	}
+}
+
+func pollGitDirty() tea.Cmd {
+	return func() tea.Msg {
+		out, _ := exec.Command("git", "status", "--porcelain").Output() //nolint:gosec
+		count := 0
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.TrimSpace(line) != "" {
+				count++
+			}
+		}
+		status := ""
+		if count > 0 {
+			status = strconv.Itoa(count) + " modified"
+		}
+		return statusUpdateMsg{key: "git.dirty", status: status}
+	}
+}
+
+// pollDocker batches all docker container probes.
+func pollDocker() tea.Cmd {
+	return tea.Batch(
+		pollDockerContainer("postgres"),
+		pollDockerContainer("redis"),
+	)
+}
+
+func pollDockerContainer(name string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := exec.Command("docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
+		status := "stopped"
+		if err == nil {
+			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+				status = trimmed
+			}
+		}
+		return statusUpdateMsg{key: "docker." + name, status: status}
+	}
 }
 
 // runCmd executes cmd asynchronously and returns the result as a cmdResultMsg.

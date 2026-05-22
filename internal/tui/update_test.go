@@ -38,9 +38,9 @@ func TestNew_InitialState(t *testing.T) {
 	}
 }
 
-func TestInit_ReturnsNil(t *testing.T) {
-	if cmd := New().Init(); cmd != nil {
-		t.Error("Init() should return nil")
+func TestInit_ReturnsCmd(t *testing.T) {
+	if cmd := New().Init(); cmd == nil {
+		t.Error("Init() should return a non-nil cmd (tick + polls)")
 	}
 }
 
@@ -263,5 +263,31 @@ func TestUpdate_CmdResult_EmptyOutput(t *testing.T) {
 	m = send(m, cmdResultMsg{output: "   "})
 	if m.output != "" {
 		t.Errorf("expected empty output after trimming, got %q", m.output)
+	}
+}
+
+// --- Live status polling ---
+
+func TestUpdate_StatusUpdate_WritesToMap(t *testing.T) {
+	m := Model{liveStatus: make(map[string]string)}
+	m = send(m, statusUpdateMsg{key: "git.branch", status: "main"})
+	if m.liveStatus["git.branch"] != "main" {
+		t.Errorf("got %q, want %q", m.liveStatus["git.branch"], "main")
+	}
+}
+
+func TestUpdate_StatusUpdate_Overwrites(t *testing.T) {
+	m := Model{liveStatus: map[string]string{"git.branch": "old"}}
+	m = send(m, statusUpdateMsg{key: "git.branch", status: "feature/x"})
+	if m.liveStatus["git.branch"] != "feature/x" {
+		t.Errorf("got %q, want %q", m.liveStatus["git.branch"], "feature/x")
+	}
+}
+
+func TestUpdate_Tick_ReturnsNewCmd(t *testing.T) {
+	m := Model{liveStatus: make(map[string]string)}
+	_, cmd := m.Update(tickMsg{})
+	if cmd == nil {
+		t.Error("tickMsg should return a non-nil batch cmd for the next cycle")
 	}
 }
