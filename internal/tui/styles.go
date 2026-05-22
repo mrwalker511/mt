@@ -49,4 +49,8 @@ var (
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF5F5F"))
+
+	liveHeaderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#5fd7af")).
+				Bold(true)
 )

@@ -94,8 +94,49 @@ func (m Model) renderRightPane(w, h int) string {
 		text = normalItemStyle.Render(status)
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Left, title, text)
+	parts := []string{title}
+	if header := m.domainLiveHeader(); header != "" {
+		parts = append(parts, header, "")
+	}
+	parts = append(parts, text)
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 	return paneStyle(focused).Width(w).Height(h).Render(content)
+}
+
+// domainLiveHeader returns a styled one-liner of live probe data for the current
+// domain, or "" if no live data is available for that domain.
+func (m Model) domainLiveHeader() string {
+	if m.domainCursor >= len(m.domains) {
+		return ""
+	}
+	switch m.domains[m.domainCursor].Name {
+	case "Context/Git":
+		branch := m.liveStatus["git.branch"]
+		if branch == "" {
+			return ""
+		}
+		label := "Branch: " + branch
+		if dirty := m.liveStatus["git.dirty"]; dirty != "" {
+			label += "  (" + dirty + ")"
+		}
+		return liveHeaderStyle.Render(label)
+
+	case "Infrastructure":
+		pg := m.liveStatus["docker.postgres"]
+		rd := m.liveStatus["docker.redis"]
+		if pg == "" && rd == "" {
+			return ""
+		}
+		var parts []string
+		if pg != "" {
+			parts = append(parts, "postgres: "+pg)
+		}
+		if rd != "" {
+			parts = append(parts, "redis: "+rd)
+		}
+		return liveHeaderStyle.Render(strings.Join(parts, "  |  "))
+	}
+	return ""
 }
 
 // renderList builds a styled string for a selectable list of items.
