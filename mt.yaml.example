@@ -1,0 +1,117 @@
+# mt configuration — copy to ~/.config/mt/config.yaml (or ./mt.yaml) and customise.
+#
+# Each domain appears in the left pane. Each target appears in the middle pane.
+# Press Enter on a target to run its cmd. Output is shown in the right pane.
+#
+# Fields:
+#   name       — display label (required)
+#   status     — hint text shown in the right pane before any command runs
+#   cmd        — command and arguments to execute on Enter (omit to disable)
+#   launch_msg — message shown when cmd exits 0 with no output (e.g. "open -a" launchers)
+
+domains:
+  - name: "App Launch"
+    targets:
+      - name: "Microsoft Word"
+        status: "App Status: Closed\n\nPress [Enter] to launch"
+        cmd: ["open", "-a", "Microsoft Word"]
+        launch_msg: "Launching Microsoft Word…"
+
+      - name: "Microsoft Excel"
+        status: "App Status: Closed\n\nPress [Enter] to launch"
+        cmd: ["open", "-a", "Microsoft Excel"]
+        launch_msg: "Launching Microsoft Excel…"
+
+      - name: "Notes"
+        status: "Press [Enter] to open"
+        cmd: ["open", "-a", "Notes"]
+        launch_msg: "Opening Notes…"
+
+      - name: "Safari"
+        status: "Press [Enter] to open"
+        cmd: ["open", "-a", "Safari"]
+        launch_msg: "Opening Safari…"
+
+      - name: "Terminal"
+        status: "Press [Enter] to open new terminal"
+        cmd: ["open", "-a", "Terminal"]
+        launch_msg: "Opening Terminal…"
+
+  - name: "Dev Tools"
+    targets:
+      - name: "VS Code"
+        status: "Press [Enter] to open editor"
+        cmd: ["open", "-a", "Visual Studio Code"]
+        launch_msg: "Opening VS Code…"
+
+      - name: "iTerm2"
+        status: "Press [Enter] to open terminal"
+        cmd: ["open", "-a", "iTerm"]
+        launch_msg: "Opening iTerm2…"
+
+      - name: "Postman"
+        status: "Press [Enter] to open Postman"
+        cmd: ["open", "-a", "Postman"]
+        launch_msg: "Opening Postman…"
+
+      - name: "TablePlus"
+        status: "Press [Enter] to open TablePlus"
+        cmd: ["open", "-a", "TablePlus"]
+        launch_msg: "Opening TablePlus…"
+
+  - name: "Infrastructure"
+    targets:
+      - name: "Docker Up"
+        status: "Docker: Stopped\n\nPress [Enter] to start containers"
+        cmd: ["docker", "compose", "up", "-d"]
+
+      - name: "Docker Down"
+        status: "Press [Enter] to stop all containers"
+        cmd: ["docker", "compose", "down"]
+
+      - name: "Postgres"
+        status: "Container: postgres\nPress [Enter] to check status"
+        cmd: ["docker", "ps", "--filter", "name=postgres", "--format",
+              "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
+
+      - name: "Redis"
+        status: "Container: redis\nPress [Enter] to check status"
+        cmd: ["docker", "ps", "--filter", "name=redis", "--format",
+              "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
+
+  - name: "RunLayer"
+    targets:
+      # Replace the cmd values below with your actual deploy tooling.
+      - name: "Deploy"
+        status: "Environment: staging\n\nPress [Enter] to deploy"
+        # cmd: ["./scripts/deploy.sh", "staging"]
+
+      - name: "Status"
+        status: "Press [Enter] to check deploy status"
+        # cmd: ["./scripts/status.sh"]
+
+      - name: "Logs"
+        status: "Press [Enter] to stream logs"
+        # cmd: ["./scripts/logs.sh", "--tail", "100"]
+
+      - name: "Rollback"
+        status: "Press [Enter] to rollback last deploy"
+        # cmd: ["./scripts/rollback.sh"]
+
+  - name: "Context/Git"
+    targets:
+      - name: "Git Status"
+        status: "Press [Enter] to run git status"
+        cmd: ["git", "status"]
+
+      - name: "Git Diff"
+        status: "Press [Enter] to view diff"
+        cmd: ["git", "diff"]
+
+      - name: "Branches"
+        status: "Press [Enter] to list branches"
+        cmd: ["git", "branch", "-a"]
+
+      - name: "Stash"
+        status: "Press [Enter] to list stash"
+        cmd: ["git", "stash", "list"]

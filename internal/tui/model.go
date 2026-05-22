@@ -33,12 +33,19 @@ type Model struct {
 	running bool   // true while a command is executing
 }
 
-// New returns a freshly initialized Model with placeholder data.
+// New returns a freshly initialized Model. Domains are loaded from the user's
+// config file if one exists; otherwise the built-in defaults are used.
 func New() Model {
-	return Model{
-		domains:    initialDomains,
+	domains, err := LoadDomains()
+	m := Model{
+		domains:    domains,
 		activePane: paneLeft,
 	}
+	if err != nil {
+		m.output = "Config error: " + err.Error()
+		m.cmdErr = "Using built-in defaults."
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {

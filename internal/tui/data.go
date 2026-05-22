@@ -2,16 +2,16 @@ package tui
 
 // Domain groups a named category with its list of actionable targets.
 type Domain struct {
-	Name    string
-	Targets []Target
+	Name    string   `yaml:"name"`
+	Targets []Target `yaml:"targets"`
 }
 
 // Target is a single actionable item within a domain.
 type Target struct {
-	Name      string
-	Status    string   // static hint shown before any execution
-	Cmd       []string // shell command to run on Enter; nil = not configured
-	LaunchMsg string   // shown when Cmd succeeds but produces no output (e.g. open -a)
+	Name      string   `yaml:"name"`
+	Status    string   `yaml:"status"`     // static hint shown before any execution
+	Cmd       []string `yaml:"cmd"`        // shell command to run on Enter; nil = not configured
+	LaunchMsg string   `yaml:"launch_msg"` // shown when Cmd succeeds but produces no output (e.g. open -a)
 }
 
 var initialDomains = []Domain{
@@ -46,10 +46,10 @@ var initialDomains = []Domain{
 	{
 		Name: "RunLayer",
 		Targets: []Target{
-			{Name: "Deploy",   Status: "Environment: staging\n\nConfigure deploy command in data.go"},
-			{Name: "Status",   Status: "Last deploy: unknown\n\nConfigure status command in data.go"},
-			{Name: "Logs",     Status: "Configure log command in data.go"},
-			{Name: "Rollback", Status: "Configure rollback command in data.go"},
+			{Name: "Deploy",   Status: "No command configured.\n\nSee mt.yaml.example to add a deploy cmd."},
+			{Name: "Status",   Status: "No command configured.\n\nSee mt.yaml.example to add a status cmd."},
+			{Name: "Logs",     Status: "No command configured.\n\nSee mt.yaml.example to add a logs cmd."},
+			{Name: "Rollback", Status: "No command configured.\n\nSee mt.yaml.example to add a rollback cmd."},
 		},
 	},
 	{
