@@ -47,7 +47,7 @@ func (m Model) View() string {
 		m.renderRightPane(rightW, contentH),
 	)
 
-	hint := "[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [q] Quit"
+	hint := "[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [?] Help  [q] Quit"
 	if len(m.allWorkspaces) > 1 {
 		hint += "  [tab] Workspace"
 	}
@@ -81,6 +81,11 @@ func (m Model) renderRightPane(w, h int) string {
 	focused := m.activePane == paneRight
 	title   := titleStyle.Render("LIVE STATUS / INFO")
 
+	if m.showHelp {
+		content := lipgloss.JoinVertical(lipgloss.Left, title, m.renderHelp())
+		return paneStyle(focused).Width(w).Height(h).Render(content)
+	}
+
 	var text string
 	switch {
 	case m.running:
@@ -109,6 +114,41 @@ func (m Model) renderRightPane(w, h int) string {
 	parts = append(parts, text)
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 	return paneStyle(focused).Width(w).Height(h).Render(content)
+}
+
+// renderHelp builds the keybinding reference displayed when showHelp is true.
+func (m Model) renderHelp() string {
+	lines := []string{
+		dimItemStyle.Render("Navigation"),
+		normalItemStyle.Render("  ↑ / k        Move up"),
+		normalItemStyle.Render("  ↓ / j        Move down"),
+		normalItemStyle.Render("  ← / h        Focus left pane"),
+		normalItemStyle.Render("  → / l        Focus right pane"),
+		"",
+		dimItemStyle.Render("Actions"),
+		normalItemStyle.Render("  Enter        Execute selected target"),
+		normalItemStyle.Render("  c            Clear output"),
+	}
+	if len(m.allWorkspaces) > 1 {
+		lines = append(lines,
+			normalItemStyle.Render("  Tab          Next workspace"),
+			normalItemStyle.Render("  Shift+Tab    Previous workspace"),
+		)
+	}
+	lines = append(lines,
+		normalItemStyle.Render("  ?            Toggle this help"),
+		normalItemStyle.Render("  q / Ctrl+C   Quit"),
+	)
+	if t, ok := m.currentTarget(); ok {
+		lines = append(lines, "", dimItemStyle.Render("Current target"))
+		lines = append(lines, normalItemStyle.Render("  "+t.Name))
+		if len(t.Cmd) > 0 {
+			lines = append(lines, dimItemStyle.Render("  $ "+strings.Join(t.Cmd, " ")))
+		} else {
+			lines = append(lines, dimItemStyle.Render("  (no command configured)"))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // domainLiveHeader returns a styled one-liner of live probe data for the current

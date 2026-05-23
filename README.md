@@ -29,6 +29,9 @@ mt
 | `←` / `h` | Focus left pane |
 | `→` / `l` | Focus right pane |
 | `Enter` | Execute selected target |
+| `c` | Clear output |
+| `?` | Toggle help overlay |
+| `Tab` / `Shift+Tab` | Switch workspace (when multiple workspaces configured) |
 | `q` / `Ctrl+C` | Quit |
 
 ## Configuration
@@ -67,7 +70,40 @@ domains:
         cmd: ["npm", "test"]
 ```
 
-See [`mt.yaml.example`](mt.yaml.example) for the full set of options and a commented template of the default targets.
+**Mac app shorthand:** Use `apps:` to add launchers without writing the full command:
+
+```yaml
+domains:
+  - name: "Apps"
+    apps:
+      - "Microsoft Outlook"
+      - "Microsoft Edge"
+      - "Visual Studio Code"
+      - "Slack"
+```
+
+Each entry auto-expands to `open -a <name>` with a launch message.
+
+**Multiple workspaces:** Switch contexts live with `Tab`/`Shift+Tab`:
+
+```yaml
+workspaces:
+  - name: "Microsoft"
+    domains:
+      - name: "Outlook"
+        targets:
+          - name: "New Email"
+            cmd: ["open", "ms-outlook://compose"]
+            launch_msg: "Opening new email…"
+  - name: "Dev"
+    domains:
+      - name: "Context/Git"
+        targets:
+          - name: "Git Status"
+            cmd: ["git", "status"]
+```
+
+See [`mt.yaml.example`](mt.yaml.example) for a full multi-workspace template with per-app actions for Outlook, Word, Excel, Edge, VS Code, and more.
 
 ## Development
 
