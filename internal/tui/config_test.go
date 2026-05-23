@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -159,8 +160,8 @@ domains:
 	if tgt.Name != "Microsoft Edge" {
 		t.Errorf("name: got %q, want %q", tgt.Name, "Microsoft Edge")
 	}
-	if len(tgt.Cmd) < 2 || tgt.Cmd[0] != "open" || tgt.Cmd[len(tgt.Cmd)-1] != "Microsoft Edge" {
-		t.Errorf("cmd: got %v, want open -a Microsoft Edge", tgt.Cmd)
+	if want := []string{"open", "-a", "Microsoft Edge"}; !slices.Equal(tgt.Cmd, want) {
+		t.Errorf("cmd: got %v, want %v", tgt.Cmd, want)
 	}
 	if tgt.LaunchMsg == "" {
 		t.Error("expected non-empty launch_msg from apps: expansion")

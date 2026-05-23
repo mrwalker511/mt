@@ -42,6 +42,8 @@ var (
 	dimItemStyle = lipgloss.NewStyle().
 			Foreground(colorDim)
 
+	dimBoldItemStyle = dimItemStyle.Bold(true)
+
 	statusBarStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color("#1C1C1C")).
 			Foreground(colorHelp).

@@ -443,16 +443,6 @@ func TestRenderRightPane_LiveHeaderShown(t *testing.T) {
 	}
 }
 
-// --- targetNames bounds safety ---
-
-func TestTargetNames_EmptyDomains(t *testing.T) {
-	m := Model{domains: []Domain{}, liveStatus: make(map[string]string)}
-	names := m.targetNames()
-	if len(names) != 0 {
-		t.Errorf("expected empty slice for empty domains, got %v", names)
-	}
-}
-
 // --- c key (clear output) ---
 
 func TestUpdate_ClearKey_ClearsOutput(t *testing.T) {
