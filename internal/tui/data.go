@@ -1,5 +1,11 @@
 package tui
 
+// Workspace groups a named set of domains for multi-project switching.
+type Workspace struct {
+	Name    string   `yaml:"name"`
+	Domains []Domain `yaml:"domains"`
+}
+
 // Domain groups a named category with its list of actionable targets.
 type Domain struct {
 	Name    string   `yaml:"name"`
@@ -61,4 +67,8 @@ var initialDomains = []Domain{
 			{Name: "Stash",      Status: "Press [Enter] to list stash",      Cmd: []string{"git", "stash", "list"}},
 		},
 	},
+}
+
+var defaultWorkspaces = []Workspace{
+	{Domains: initialDomains},
 }
