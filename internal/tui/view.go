@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -47,9 +48,12 @@ func (m Model) View() string {
 		m.renderRightPane(rightW, contentH),
 	)
 
-	hint := "[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [?] Help  [q] Quit"
+	hint := "[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [?] Help  [R] Reload  [q] Quit"
 	if len(m.allWorkspaces) > 1 {
 		hint += "  [tab] Workspace"
+	}
+	if m.activePane == paneRight && m.output != "" {
+		hint += "  [j/k] Scroll"
 	}
 	bar := statusBarStyle.Width(m.width).Render(hint)
 
@@ -91,11 +95,11 @@ func (m Model) renderRightPane(w, h int) string {
 	case m.running:
 		text = dimItemStyle.Render("Running…")
 	case m.cmdErr != "" && m.output != "":
-		text = normalItemStyle.Render(m.output) + "\n\n" + errorStyle.Render("Error: "+m.cmdErr)
+		text = m.renderScrollableOutput(m.output) + "\n\n" + errorStyle.Render("Error: "+m.cmdErr)
 	case m.cmdErr != "":
 		text = errorStyle.Render("Error: " + m.cmdErr)
 	case m.output != "":
-		text = normalItemStyle.Render(m.output)
+		text = m.renderScrollableOutput(m.output)
 	default:
 		status := "Select a target to view status."
 		if m.domainCursor < len(m.domains) {
@@ -255,4 +259,26 @@ func (m Model) targetNames() []string {
 		names[i] = t.Name
 	}
 	return names
+}
+
+// renderScrollableOutput renders output text with scrolling when it exceeds the page size.
+func (m Model) renderScrollableOutput(output string) string {
+	lines := strings.Split(output, "\n")
+	pageSize := m.rightPanePageSize()
+	if len(lines) <= pageSize {
+		return normalItemStyle.Render(output)
+	}
+	offset := m.scrollOffset
+	if offset < 0 {
+		offset = 0
+	}
+	end := offset + pageSize
+	if end > len(lines) {
+		end = len(lines)
+	}
+	visible := strings.Join(lines[offset:end], "\n")
+	result := normalItemStyle.Render(visible)
+	result += "\n" + dimItemStyle.Render(fmt.Sprintf(
+		"  ── %d/%d lines  [j↓ k↑] ──", offset+1, len(lines)))
+	return result
 }

@@ -38,6 +38,12 @@ const (
 	runFailure runResult = 2
 )
 
+// outputRecord stores the output and error text of a previously executed target.
+type outputRecord struct {
+	output string
+	cmdErr string
+}
+
 // Model is the single source of truth for the entire TUI.
 type Model struct {
 	width  int
@@ -60,6 +66,9 @@ type Model struct {
 	liveStatus    map[string]string    // live probe results keyed by semantic name
 	runStates     map[string]runResult // last run outcome keyed by runKey()
 	pendingTarget string               // key of the target currently executing
+
+	targetOutputs map[string]outputRecord // cached output per target, keyed by runKey()
+	scrollOffset  int                     // first visible line in right-pane output
 
 	showHelp bool // true when the ? help overlay is shown in the right pane
 }
@@ -98,6 +107,42 @@ func (m Model) runKey(domainName, targetName string) string {
 	return ws + "/" + domainName + "/" + targetName
 }
 
+// rightPanePageSize returns the number of content lines visible in the right pane.
+func (m Model) rightPanePageSize() int {
+	size := m.height - statusBarHeight - borderHeight - 3
+	if size < 1 {
+		return 1
+	}
+	return size
+}
+
+// saveTargetOutput stores the current output/cmdErr under the active target's key.
+func (m Model) saveTargetOutput() Model {
+	if m.domainCursor < len(m.domains) {
+		targets := m.domains[m.domainCursor].Targets
+		if m.targetCursor < len(targets) {
+			key := m.runKey(m.domains[m.domainCursor].Name, targets[m.targetCursor].Name)
+			m.targetOutputs[key] = outputRecord{m.output, m.cmdErr}
+		}
+	}
+	return m
+}
+
+// restoreTargetOutput loads cached output for the newly active target, or clears if none.
+func (m Model) restoreTargetOutput() Model {
+	m.output, m.cmdErr, m.scrollOffset = "", "", 0
+	if m.domainCursor < len(m.domains) {
+		targets := m.domains[m.domainCursor].Targets
+		if m.targetCursor < len(targets) {
+			key := m.runKey(m.domains[m.domainCursor].Name, targets[m.targetCursor].Name)
+			if rec, ok := m.targetOutputs[key]; ok {
+				m.output, m.cmdErr = rec.output, rec.cmdErr
+			}
+		}
+	}
+	return m
+}
+
 // New returns a freshly initialized Model. Workspaces are loaded from the user's
 // config file if one exists; otherwise the built-in defaults are used.
 func New() Model {
@@ -109,6 +154,7 @@ func New() Model {
 		activePane:    paneLeft,
 		liveStatus:    make(map[string]string),
 		runStates:     make(map[string]runResult),
+		targetOutputs: make(map[string]outputRecord),
 	}
 	if err != nil {
 		m.output = "Config error: " + err.Error()

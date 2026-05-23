@@ -28,8 +28,10 @@ func key(r rune) tea.KeyMsg {
 // It has 2 domains with 3 and 2 targets respectively.
 func testModel() Model {
 	return Model{
-		activePane: paneLeft,
-		liveStatus: make(map[string]string),
+		activePane:    paneLeft,
+		liveStatus:    make(map[string]string),
+		runStates:     make(map[string]runResult),
+		targetOutputs: make(map[string]outputRecord),
 		domains: []Domain{
 			{Name: "Domain A", Targets: []Target{
 				{Name: "T1", Status: "hint1"},
@@ -574,6 +576,7 @@ func testWorkspaceModel() Model {
 		activePane:    paneLeft,
 		liveStatus:    make(map[string]string),
 		runStates:     make(map[string]runResult),
+		targetOutputs: make(map[string]outputRecord),
 		allWorkspaces: ws,
 		workspaceIdx:  0,
 		domains:       ws[0].Domains,
@@ -678,5 +681,140 @@ func TestUpdate_WorkspaceTab_SingleWorkspace_NoOp(t *testing.T) {
 	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
 	if m.workspaceIdx != 0 {
 		t.Errorf("expected no change for single workspace, got idx=%d", m.workspaceIdx)
+	}
+}
+
+// --- Phase 8: output scrolling ---
+
+func TestUpdate_RightPane_ScrollDown(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.activePane = paneRight
+	m.height = 30
+	m.output = strings.Repeat("line\n", 50)
+	m = press(m, key('j'))
+	if m.scrollOffset != 1 {
+		t.Errorf("expected scrollOffset=1 after j in right pane, got %d", m.scrollOffset)
+	}
+}
+
+func TestUpdate_RightPane_ScrollUp(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.activePane = paneRight
+	m.height = 30
+	m.output = strings.Repeat("line\n", 50)
+	m.scrollOffset = 5
+	m = press(m, key('k'))
+	if m.scrollOffset != 4 {
+		t.Errorf("expected scrollOffset=4 after k in right pane, got %d", m.scrollOffset)
+	}
+	// clamp at 0
+	m.scrollOffset = 0
+	m = press(m, key('k'))
+	if m.scrollOffset != 0 {
+		t.Errorf("expected scrollOffset to clamp at 0, got %d", m.scrollOffset)
+	}
+}
+
+func TestUpdate_ScrollOffset_ResetOnNewOutput(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.scrollOffset = 10
+	m.pendingTarget = "some/target"
+	m = send(m, cmdResultMsg{output: "fresh output", err: nil})
+	if m.scrollOffset != 0 {
+		t.Errorf("expected scrollOffset=0 after cmdResultMsg, got %d", m.scrollOffset)
+	}
+}
+
+// --- Phase 8: per-target output memory ---
+
+func TestUpdate_TargetOutputMemory_SavesOnNavigate(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.activePane = paneMiddle
+	m.output = "result of T1"
+	m.cmdErr = ""
+	// navigate down from T1 to T2
+	m = press(m, key('j'))
+	key1 := m.runKey("Domain A", "T1")
+	rec, ok := m.targetOutputs[key1]
+	if !ok {
+		t.Fatal("expected T1 output to be saved on navigate")
+	}
+	if rec.output != "result of T1" {
+		t.Errorf("saved output: got %q, want %q", rec.output, "result of T1")
+	}
+}
+
+func TestUpdate_TargetOutputMemory_RestoresOnReturn(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.activePane = paneMiddle
+	// pre-populate T1's output in the cache
+	m.targetOutputs[m.runKey("Domain A", "T1")] = outputRecord{output: "cached T1 output", cmdErr: ""}
+	// start on T2 with empty output
+	m.targetCursor = 1
+	m.output = ""
+	// navigate up to T1
+	m = press(m, key('k'))
+	if m.targetCursor != 0 {
+		t.Fatalf("expected targetCursor=0, got %d", m.targetCursor)
+	}
+	if m.output != "cached T1 output" {
+		t.Errorf("expected restored output %q, got %q", "cached T1 output", m.output)
+	}
+}
+
+func TestUpdate_TargetOutputMemory_EmptyForNewTarget(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.activePane = paneMiddle
+	m.output = "some prior output"
+	// navigate to T2 which has no cached output
+	m = press(m, key('j'))
+	if m.output != "" {
+		t.Errorf("expected empty output for unvisited target, got %q", m.output)
+	}
+}
+
+// --- Phase 8: config hot-reload ---
+
+func TestUpdate_HotReload_UpdatesWorkspaces(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.allWorkspaces = []Workspace{
+		{Name: "Old", Domains: m.domains},
+	}
+	m.domainCursor = 1
+	m.targetCursor = 1
+	m.scrollOffset = 5
+	m.showHelp = true
+
+	// Press R — will call LoadWorkspaces() which falls back to defaults since no config file
+	m = press(m, key('R'))
+
+	if m.domainCursor != 0 {
+		t.Errorf("expected domainCursor reset to 0, got %d", m.domainCursor)
+	}
+	if m.targetCursor != 0 {
+		t.Errorf("expected targetCursor reset to 0, got %d", m.targetCursor)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("expected scrollOffset reset to 0, got %d", m.scrollOffset)
+	}
+	if m.showHelp {
+		t.Error("expected showHelp=false after reload")
+	}
+	if len(m.allWorkspaces) == 0 {
+		t.Error("expected allWorkspaces to be populated after reload")
 	}
 }

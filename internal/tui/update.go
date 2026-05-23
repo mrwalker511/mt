@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -36,6 +37,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cmdResultMsg:
 		m.running = false
 		m.output = strings.TrimSpace(msg.output)
+		m.scrollOffset = 0
 		if msg.err != nil {
 			m.cmdErr = msg.err.Error()
 			if m.pendingTarget != "" {
@@ -62,26 +64,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			m.output = ""
 			m.cmdErr = ""
+			m.scrollOffset = 0
+
+		case "R":
+			workspaces, err := LoadWorkspaces()
+			m.allWorkspaces = workspaces
+			m.workspaceIdx = 0
+			m.domains = workspaces[0].Domains
+			m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
+			m.showHelp = false
+			if err != nil {
+				m.output, m.cmdErr = "", "Config reload error: "+err.Error()
+			} else {
+				m.output = fmt.Sprintf("Config reloaded — %d workspace(s) loaded.", len(workspaces))
+				m.cmdErr = ""
+			}
 
 		case "tab":
 			if len(m.allWorkspaces) > 1 {
+				m = m.saveTargetOutput()
 				m.workspaceIdx = (m.workspaceIdx + 1) % len(m.allWorkspaces)
 				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
 				m.domainCursor = 0
 				m.targetCursor = 0
-				m.output = ""
-				m.cmdErr = ""
+				m = m.restoreTargetOutput()
 				m.showHelp = false
 			}
 
 		case "shift+tab":
 			if len(m.allWorkspaces) > 1 {
+				m = m.saveTargetOutput()
 				m.workspaceIdx = (m.workspaceIdx - 1 + len(m.allWorkspaces)) % len(m.allWorkspaces)
 				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
 				m.domainCursor = 0
 				m.targetCursor = 0
-				m.output = ""
-				m.cmdErr = ""
+				m = m.restoreTargetOutput()
 				m.showHelp = false
 			}
 
@@ -118,16 +135,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.activePane {
 			case paneLeft:
 				if m.domainCursor > 0 {
+					m = m.saveTargetOutput()
 					m.domainCursor--
 					m.targetCursor = 0
-					m.output, m.cmdErr = "", ""
+					m = m.restoreTargetOutput()
 					m.showHelp = false
 				}
 			case paneMiddle:
 				if m.targetCursor > 0 {
+					m = m.saveTargetOutput()
 					m.targetCursor--
-					m.output, m.cmdErr = "", ""
+					m = m.restoreTargetOutput()
 					m.showHelp = false
+				}
+			case paneRight:
+				if m.scrollOffset > 0 {
+					m.scrollOffset--
 				}
 			}
 
@@ -135,17 +158,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.activePane {
 			case paneLeft:
 				if m.domainCursor < len(m.domains)-1 {
+					m = m.saveTargetOutput()
 					m.domainCursor++
 					m.targetCursor = 0
-					m.output, m.cmdErr = "", ""
+					m = m.restoreTargetOutput()
 					m.showHelp = false
 				}
 			case paneMiddle:
 				targets := m.domains[m.domainCursor].Targets
 				if m.targetCursor < len(targets)-1 {
+					m = m.saveTargetOutput()
 					m.targetCursor++
-					m.output, m.cmdErr = "", ""
+					m = m.restoreTargetOutput()
 					m.showHelp = false
+				}
+			case paneRight:
+				lines := strings.Split(m.output, "\n")
+				pageSize := m.rightPanePageSize()
+				if m.scrollOffset < len(lines)-pageSize {
+					m.scrollOffset++
 				}
 			}
 		}
