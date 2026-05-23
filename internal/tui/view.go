@@ -206,7 +206,7 @@ func (m Model) renderList(items []string, cursor int, paneActive bool) string {
 		case i == cursor && paneActive:
 			s = selectedItemStyle
 		case i == cursor:
-			s = dimItemStyle.Bold(true)
+			s = dimBoldItemStyle
 		default:
 			s = normalItemStyle
 		}
@@ -245,18 +245,6 @@ func (m Model) domainNames() []string {
 	names := make([]string, len(m.domains))
 	for i, d := range m.domains {
 		names[i] = d.Name
-	}
-	return names
-}
-
-func (m Model) targetNames() []string {
-	if m.domainCursor >= len(m.domains) {
-		return []string{}
-	}
-	targets := m.domains[m.domainCursor].Targets
-	names := make([]string, len(targets))
-	for i, t := range targets {
-		names[i] = t.Name
 	}
 	return names
 }

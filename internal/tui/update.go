@@ -70,8 +70,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			workspaces, err := LoadWorkspaces()
 			m.allWorkspaces = workspaces
 			m.workspaceIdx = 0
-			m.domains = workspaces[0].Domains
+			if len(workspaces) > 0 {
+				m.domains = workspaces[0].Domains
+			} else {
+				m.domains = nil
+			}
 			m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
+			m.targetOutputs = make(map[string]outputRecord)
 			m.showHelp = false
 			if err != nil {
 				m.output, m.cmdErr = "", "Config reload error: "+err.Error()
@@ -165,6 +170,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.showHelp = false
 				}
 			case paneMiddle:
+				if m.domainCursor >= len(m.domains) {
+					break
+				}
 				targets := m.domains[m.domainCursor].Targets
 				if m.targetCursor < len(targets)-1 {
 					m = m.saveTargetOutput()
@@ -222,7 +230,10 @@ func pollGitBranch() tea.Cmd {
 
 func pollGitDirty() tea.Cmd {
 	return func() tea.Msg {
-		out, _ := exec.Command("git", "status", "--porcelain").Output() //nolint:gosec
+		out, err := exec.Command("git", "status", "--porcelain").Output() //nolint:gosec
+		if err != nil {
+			return statusUpdateMsg{key: "git.dirty", status: ""}
+		}
 		count := 0
 		for _, line := range strings.Split(string(out), "\n") {
 			if strings.TrimSpace(line) != "" {

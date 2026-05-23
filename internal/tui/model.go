@@ -147,18 +147,21 @@ func (m Model) restoreTargetOutput() Model {
 // config file if one exists; otherwise the built-in defaults are used.
 func New() Model {
 	workspaces, err := LoadWorkspaces()
+	var domains []Domain
+	if len(workspaces) > 0 {
+		domains = workspaces[0].Domains
+	}
 	m := Model{
 		allWorkspaces: workspaces,
 		workspaceIdx:  0,
-		domains:       workspaces[0].Domains,
+		domains:       domains,
 		activePane:    paneLeft,
 		liveStatus:    make(map[string]string),
 		runStates:     make(map[string]runResult),
 		targetOutputs: make(map[string]outputRecord),
 	}
 	if err != nil {
-		m.output = "Config error: " + err.Error()
-		m.cmdErr = "Using built-in defaults."
+		m.cmdErr = "Config error — using built-in defaults."
 	}
 	return m
 }
