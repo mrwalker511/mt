@@ -20,7 +20,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(tickCmd(), pollGit(), pollDocker())
+		cmds := []tea.Cmd{tickCmd()}
+		if m.hasGitDomain() {
+			cmds = append(cmds, pollGit())
+		}
+		if m.hasDockerDomain() {
+			cmds = append(cmds, pollDocker())
+		}
+		return m, tea.Batch(cmds...)
 
 	case statusUpdateMsg:
 		m.liveStatus[msg.key] = msg.status
@@ -49,6 +56,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
+		case "?":
+			m.showHelp = !m.showHelp
+
 		case "c":
 			m.output = ""
 			m.cmdErr = ""
@@ -61,6 +71,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.targetCursor = 0
 				m.output = ""
 				m.cmdErr = ""
+				m.showHelp = false
 			}
 
 		case "shift+tab":
@@ -71,6 +82,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.targetCursor = 0
 				m.output = ""
 				m.cmdErr = ""
+				m.showHelp = false
 			}
 
 		case "enter":
@@ -89,6 +101,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.running = true
 			m.output = ""
 			m.cmdErr = ""
+			m.showHelp = false
 			return m, runCmd(target.Cmd, target.LaunchMsg)
 
 		case "left", "h":
@@ -108,11 +121,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.domainCursor--
 					m.targetCursor = 0
 					m.output, m.cmdErr = "", ""
+					m.showHelp = false
 				}
 			case paneMiddle:
 				if m.targetCursor > 0 {
 					m.targetCursor--
 					m.output, m.cmdErr = "", ""
+					m.showHelp = false
 				}
 			}
 
@@ -123,12 +138,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.domainCursor++
 					m.targetCursor = 0
 					m.output, m.cmdErr = "", ""
+					m.showHelp = false
 				}
 			case paneMiddle:
 				targets := m.domains[m.domainCursor].Targets
 				if m.targetCursor < len(targets)-1 {
 					m.targetCursor++
 					m.output, m.cmdErr = "", ""
+					m.showHelp = false
 				}
 			}
 		}

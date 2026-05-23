@@ -60,6 +60,28 @@ type Model struct {
 	liveStatus    map[string]string    // live probe results keyed by semantic name
 	runStates     map[string]runResult // last run outcome keyed by runKey()
 	pendingTarget string               // key of the target currently executing
+
+	showHelp bool // true when the ? help overlay is shown in the right pane
+}
+
+// hasGitDomain reports whether the active workspace has a Context/Git domain.
+func (m Model) hasGitDomain() bool {
+	for _, d := range m.domains {
+		if d.Name == "Context/Git" {
+			return true
+		}
+	}
+	return false
+}
+
+// hasDockerDomain reports whether the active workspace has an Infrastructure domain.
+func (m Model) hasDockerDomain() bool {
+	for _, d := range m.domains {
+		if d.Name == "Infrastructure" {
+			return true
+		}
+	}
+	return false
 }
 
 // runKey returns a unique key for a target, scoped to the current workspace name.
@@ -96,7 +118,15 @@ func New() Model {
 }
 
 // Init fires the initial status polls and starts the refresh tick.
+// Git and Docker polls are skipped when the active workspace has no relevant domains.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tickCmd(), pollGit(), pollDocker())
+	cmds := []tea.Cmd{tickCmd()}
+	if m.hasGitDomain() {
+		cmds = append(cmds, pollGit())
+	}
+	if m.hasDockerDomain() {
+		cmds = append(cmds, pollDocker())
+	}
+	return tea.Batch(cmds...)
 }
 

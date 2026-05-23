@@ -628,6 +628,42 @@ func TestUpdate_WorkspaceSwitch_ClearsOutput(t *testing.T) {
 	}
 }
 
+func TestHasGitDomain_True(t *testing.T) {
+	m := Model{
+		domains: []Domain{
+			{Name: "App Launch"},
+			{Name: "Context/Git"},
+		},
+	}
+	if !m.hasGitDomain() {
+		t.Error("expected hasGitDomain=true when Context/Git domain is present")
+	}
+}
+
+func TestHasDockerDomain_False(t *testing.T) {
+	m := Model{
+		domains: []Domain{
+			{Name: "App Launch"},
+			{Name: "Context/Git"},
+		},
+	}
+	if m.hasDockerDomain() {
+		t.Error("expected hasDockerDomain=false when no Infrastructure domain")
+	}
+}
+
+func TestUpdate_HelpToggle(t *testing.T) {
+	m := Model{liveStatus: make(map[string]string), runStates: make(map[string]runResult)}
+	m = press(m, key('?'))
+	if !m.showHelp {
+		t.Error("expected showHelp=true after first ?")
+	}
+	m = press(m, key('?'))
+	if m.showHelp {
+		t.Error("expected showHelp=false after second ?")
+	}
+}
+
 func TestUpdate_WorkspaceTab_SingleWorkspace_NoOp(t *testing.T) {
 	m := Model{
 		activePane: paneLeft,

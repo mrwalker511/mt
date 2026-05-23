@@ -1,138 +1,205 @@
-# mt configuration — copy to ~/.config/mt/config.yaml (or ./mt.yaml) and customise.
+# mt configuration — copy to the right location for your platform and customise.
 #
-# Each domain appears in the left pane. Each target appears in the middle pane.
-# Press Enter on a target to run its cmd. Output is shown in the right pane.
+#   macOS:  ~/Library/Application Support/mt/config.yaml
+#   Linux:  ~/.config/mt/config.yaml
+#   Local:  ./mt.yaml  (overrides the above)
 #
-# Fields:
+# ─── Quick-start: apps shorthand ──────────────────────────────────────────────
+# List Mac app names under apps: and mt generates the open -a command for you.
+# No cmd/status/launch_msg needed — just the name as macOS knows it.
+#
+#   domains:
+#     - name: "My Apps"
+#       apps:
+#         - "Microsoft Outlook"
+#         - "Microsoft Edge"
+#         - "Visual Studio Code"
+#         - "Slack"
+#
+# ─── Multi-workspace config ────────────────────────────────────────────────────
+# Use workspaces: to group different sets of domains and switch between them
+# with Tab / Shift+Tab inside mt.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Full field reference:
 #   name       — display label (required)
 #   status     — hint text shown in the right pane before any command runs
 #   cmd        — command and arguments to execute on Enter (omit to disable)
-#   launch_msg — message shown when cmd exits 0 with no output (e.g. "open -a" launchers)
-#
-# ─── Multi-workspace config (optional) ────────────────────────────────────────
-# Wrap domains inside named workspaces to switch contexts live with Tab / Shift+Tab.
-# Replace the flat "domains:" key below with a "workspaces:" key:
-#
-# workspaces:
-#   - name: "Team Alpha"
-#     domains:
-#       - name: "Context/Git"
-#         targets:
-#           - name: "Git Status"
-#             cmd: ["git", "status"]
-#   - name: "Team Beta"
-#     domains:
-#       - name: "Deploy"
-#         targets:
-#           - name: "Deploy Staging"
-#             cmd: ["./scripts/deploy.sh", "staging"]
-#
-# Press Tab / Shift+Tab in mt to cycle between workspaces.
-# ──────────────────────────────────────────────────────────────────────────────
+#   launch_msg — message shown when cmd exits 0 with no output (e.g. open -a)
 
-domains:
-  - name: "App Launch"
-    targets:
-      - name: "Microsoft Word"
-        status: "App Status: Closed\n\nPress [Enter] to launch"
-        cmd: ["open", "-a", "Microsoft Word"]
-        launch_msg: "Launching Microsoft Word…"
+# ── Example: multi-workspace config with per-app actions ──────────────────────
 
-      - name: "Microsoft Excel"
-        status: "App Status: Closed\n\nPress [Enter] to launch"
-        cmd: ["open", "-a", "Microsoft Excel"]
-        launch_msg: "Launching Microsoft Excel…"
+workspaces:
 
-      - name: "Notes"
-        status: "Press [Enter] to open"
-        cmd: ["open", "-a", "Notes"]
-        launch_msg: "Opening Notes…"
+  # ── Microsoft workspace ─────────────────────────────────────────────────────
+  - name: "Microsoft"
+    domains:
 
-      - name: "Safari"
-        status: "Press [Enter] to open"
-        cmd: ["open", "-a", "Safari"]
-        launch_msg: "Opening Safari…"
+      - name: "Outlook"
+        targets:
+          - name: "Open Outlook"
+            cmd: ["open", "-a", "Microsoft Outlook"]
+            launch_msg: "Opening Outlook…"
+
+          - name: "New Email"
+            status: "Opens a new draft email in Outlook"
+            cmd: ["open", "ms-outlook://compose"]
+            launch_msg: "Opening new email…"
+
+          - name: "Open Inbox"
+            status: "Opens the Outlook inbox"
+            cmd: ["open", "ms-outlook://mail"]
+            launch_msg: "Opening inbox…"
+
+          - name: "Open Calendar"
+            status: "Opens the Outlook calendar view"
+            cmd: ["open", "ms-outlook://calendar"]
+            launch_msg: "Opening calendar…"
+
+      - name: "Word"
+        targets:
+          - name: "Open Word"
+            cmd: ["open", "-a", "Microsoft Word"]
+            launch_msg: "Opening Word…"
+
+          - name: "New Document"
+            status: "Creates a blank Word document"
+            cmd: ["osascript", "-e",
+                  "tell application \"Microsoft Word\" to make new document"]
+            launch_msg: "Creating new document…"
+
+      - name: "Excel"
+        targets:
+          - name: "Open Excel"
+            cmd: ["open", "-a", "Microsoft Excel"]
+            launch_msg: "Opening Excel…"
+
+          - name: "New Workbook"
+            status: "Creates a blank Excel workbook"
+            cmd: ["osascript", "-e",
+                  "tell application \"Microsoft Excel\" to make new workbook"]
+            launch_msg: "Creating new workbook…"
+
+      - name: "Edge"
+        targets:
+          - name: "Open Edge"
+            cmd: ["open", "-a", "Microsoft Edge"]
+            launch_msg: "Opening Edge…"
+
+          - name: "Outlook Web"
+            status: "Opens Outlook in Edge"
+            cmd: ["open", "-a", "Microsoft Edge", "--args",
+                  "https://outlook.office.com"]
+            launch_msg: "Opening Outlook Web…"
+
+          - name: "New InPrivate Window"
+            status: "Opens a private browsing window"
+            cmd: ["open", "-a", "Microsoft Edge", "--args",
+                  "--inprivate"]
+            launch_msg: "Opening InPrivate window…"
+
+  # ── Dev workspace ────────────────────────────────────────────────────────────
+  - name: "Dev"
+    domains:
+
+      - name: "VS Code"
+        targets:
+          - name: "Open VS Code"
+            cmd: ["open", "-a", "Visual Studio Code"]
+            launch_msg: "Opening VS Code…"
+
+          - name: "Open Current Dir"
+            status: "Opens the current working directory in VS Code"
+            cmd: ["code", "."]
+            launch_msg: "Opening folder in VS Code…"
 
       - name: "Terminal"
-        status: "Press [Enter] to open new terminal"
-        cmd: ["open", "-a", "Terminal"]
-        launch_msg: "Opening Terminal…"
+        targets:
+          - name: "New Terminal Window"
+            cmd: ["open", "-a", "Terminal"]
+            launch_msg: "Opening Terminal…"
 
-  - name: "Dev Tools"
-    targets:
-      - name: "VS Code"
-        status: "Press [Enter] to open editor"
-        cmd: ["open", "-a", "Visual Studio Code"]
-        launch_msg: "Opening VS Code…"
+          - name: "New iTerm2 Window"
+            cmd: ["open", "-a", "iTerm"]
+            launch_msg: "Opening iTerm2…"
 
-      - name: "iTerm2"
-        status: "Press [Enter] to open terminal"
-        cmd: ["open", "-a", "iTerm"]
-        launch_msg: "Opening iTerm2…"
+      - name: "Infrastructure"
+        targets:
+          - name: "Docker Up"
+            status: "Docker: Stopped\n\nPress [Enter] to start containers"
+            cmd: ["docker", "compose", "up", "-d"]
 
-      - name: "Postman"
-        status: "Press [Enter] to open Postman"
-        cmd: ["open", "-a", "Postman"]
-        launch_msg: "Opening Postman…"
+          - name: "Docker Down"
+            status: "Press [Enter] to stop all containers"
+            cmd: ["docker", "compose", "down"]
 
-      - name: "TablePlus"
-        status: "Press [Enter] to open TablePlus"
-        cmd: ["open", "-a", "TablePlus"]
-        launch_msg: "Opening TablePlus…"
+          - name: "Postgres"
+            status: "Container: postgres\nPress [Enter] to check status"
+            cmd: ["docker", "ps", "--filter", "name=postgres", "--format",
+                  "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
 
-  - name: "Infrastructure"
-    targets:
-      - name: "Docker Up"
-        status: "Docker: Stopped\n\nPress [Enter] to start containers"
-        cmd: ["docker", "compose", "up", "-d"]
+          - name: "Redis"
+            status: "Container: redis\nPress [Enter] to check status"
+            cmd: ["docker", "ps", "--filter", "name=redis", "--format",
+                  "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
 
-      - name: "Docker Down"
-        status: "Press [Enter] to stop all containers"
-        cmd: ["docker", "compose", "down"]
+      - name: "Context/Git"
+        targets:
+          - name: "Git Status"
+            status: "Press [Enter] to run git status"
+            cmd: ["git", "status"]
 
-      - name: "Postgres"
-        status: "Container: postgres\nPress [Enter] to check status"
-        cmd: ["docker", "ps", "--filter", "name=postgres", "--format",
-              "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
+          - name: "Git Diff"
+            status: "Press [Enter] to view diff"
+            cmd: ["git", "diff"]
 
-      - name: "Redis"
-        status: "Container: redis\nPress [Enter] to check status"
-        cmd: ["docker", "ps", "--filter", "name=redis", "--format",
-              "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
+          - name: "Branches"
+            status: "Press [Enter] to list branches"
+            cmd: ["git", "branch", "-a"]
 
-  - name: "RunLayer"
-    targets:
-      # Replace the cmd values below with your actual deploy tooling.
-      - name: "Deploy"
-        status: "Environment: staging\n\nPress [Enter] to deploy"
-        # cmd: ["./scripts/deploy.sh", "staging"]
+          - name: "Stash"
+            status: "Press [Enter] to list stash"
+            cmd: ["git", "stash", "list"]
 
-      - name: "Status"
-        status: "Press [Enter] to check deploy status"
-        # cmd: ["./scripts/status.sh"]
+  # ── Deploy workspace (fill in your tooling) ──────────────────────────────────
+  - name: "Deploy"
+    domains:
 
-      - name: "Logs"
-        status: "Press [Enter] to stream logs"
-        # cmd: ["./scripts/logs.sh", "--tail", "100"]
+      - name: "RunLayer"
+        targets:
+          - name: "Deploy Staging"
+            status: "Press [Enter] to deploy to staging"
+            # cmd: ["./scripts/deploy.sh", "staging"]
 
-      - name: "Rollback"
-        status: "Press [Enter] to rollback last deploy"
-        # cmd: ["./scripts/rollback.sh"]
+          - name: "Deploy Production"
+            status: "Press [Enter] to deploy to production"
+            # cmd: ["./scripts/deploy.sh", "production"]
 
-  - name: "Context/Git"
-    targets:
-      - name: "Git Status"
-        status: "Press [Enter] to run git status"
-        cmd: ["git", "status"]
+          - name: "View Logs"
+            status: "Press [Enter] to stream logs"
+            # cmd: ["./scripts/logs.sh", "--tail", "100"]
 
-      - name: "Git Diff"
-        status: "Press [Enter] to view diff"
-        cmd: ["git", "diff"]
+          - name: "Rollback"
+            status: "Press [Enter] to rollback last deploy"
+            # cmd: ["./scripts/rollback.sh"]
 
-      - name: "Branches"
-        status: "Press [Enter] to list branches"
-        cmd: ["git", "branch", "-a"]
-
-      - name: "Stash"
-        status: "Press [Enter] to list stash"
-        cmd: ["git", "stash", "list"]
+# ── Alternative: simple flat config (single workspace, apps shorthand) ─────────
+#
+# domains:
+#   - name: "Apps"
+#     apps:
+#       - "Microsoft Outlook"
+#       - "Microsoft Word"
+#       - "Microsoft Excel"
+#       - "Microsoft Edge"
+#       - "Slack"
+#       - "Zoom"
+#
+#   - name: "Dev Tools"
+#     apps:
+#       - "Visual Studio Code"
+#       - "iTerm"
+#     targets:
+#       - name: "Git Status"
+#         cmd: ["git", "status"]

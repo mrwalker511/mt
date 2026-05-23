@@ -126,6 +126,84 @@ workspaces:
 	}
 }
 
+func TestLoadWorkspaces_AppsKey_ExpandsToTargets(t *testing.T) {
+	yaml := `
+domains:
+  - name: "My Apps"
+    apps:
+      - "Microsoft Edge"
+`
+	path := writeTemp(t, yaml)
+	dir := filepath.Dir(path)
+	dest := filepath.Join(dir, "mt.yaml")
+	if err := os.Rename(path, dest); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	os.Chdir(dir)                         //nolint:errcheck
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	workspaces, err := LoadWorkspaces()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(workspaces) != 1 {
+		t.Fatalf("got %d workspaces, want 1", len(workspaces))
+	}
+	targets := workspaces[0].Domains[0].Targets
+	if len(targets) != 1 {
+		t.Fatalf("got %d targets, want 1", len(targets))
+	}
+	tgt := targets[0]
+	if tgt.Name != "Microsoft Edge" {
+		t.Errorf("name: got %q, want %q", tgt.Name, "Microsoft Edge")
+	}
+	if len(tgt.Cmd) < 2 || tgt.Cmd[0] != "open" || tgt.Cmd[len(tgt.Cmd)-1] != "Microsoft Edge" {
+		t.Errorf("cmd: got %v, want open -a Microsoft Edge", tgt.Cmd)
+	}
+	if tgt.LaunchMsg == "" {
+		t.Error("expected non-empty launch_msg from apps: expansion")
+	}
+}
+
+func TestLoadWorkspaces_AppsAndTargets_OrderPreserved(t *testing.T) {
+	yaml := `
+domains:
+  - name: "Mixed"
+    targets:
+      - name: "Explicit First"
+        cmd: ["echo", "first"]
+    apps:
+      - "App Second"
+`
+	path := writeTemp(t, yaml)
+	dir := filepath.Dir(path)
+	dest := filepath.Join(dir, "mt.yaml")
+	if err := os.Rename(path, dest); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	os.Chdir(dir)                         //nolint:errcheck
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	workspaces, err := LoadWorkspaces()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	targets := workspaces[0].Domains[0].Targets
+	if len(targets) != 2 {
+		t.Fatalf("got %d targets, want 2", len(targets))
+	}
+	if targets[0].Name != "Explicit First" {
+		t.Errorf("first target: got %q, want %q", targets[0].Name, "Explicit First")
+	}
+	if targets[1].Name != "App Second" {
+		t.Errorf("second target: got %q, want %q", targets[1].Name, "App Second")
+	}
+}
+
 func TestLoadWorkspaces_InvalidYAML_ReturnsDefaults(t *testing.T) {
 	path := writeTemp(t, "domains: [[[invalid")
 
