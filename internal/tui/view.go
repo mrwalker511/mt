@@ -47,17 +47,23 @@ func (m Model) View() string {
 		m.renderRightPane(rightW, contentH),
 	)
 
-	bar := statusBarStyle.Width(m.width).Render(
-		"[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [q] Quit",
-	)
+	hint := "[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [q] Quit"
+	if len(m.allWorkspaces) > 1 {
+		hint += "  [tab] Workspace"
+	}
+	bar := statusBarStyle.Width(m.width).Render(hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, body, bar)
 }
 
 func (m Model) renderLeftPane(w, h int) string {
 	focused := m.activePane == paneLeft
-	title   := titleStyle.Render("DOMAINS")
-	items   := m.renderList(m.domainNames(), m.domainCursor, focused)
+	titleText := "DOMAINS"
+	if len(m.allWorkspaces) > 1 && m.allWorkspaces[m.workspaceIdx].Name != "" {
+		titleText = "DOMAINS — " + m.allWorkspaces[m.workspaceIdx].Name
+	}
+	title := titleStyle.Render(titleText)
+	items := m.renderList(m.domainNames(), m.domainCursor, focused)
 	content := lipgloss.JoinVertical(lipgloss.Left, title, items)
 	return paneStyle(focused).Width(w).Height(h).Render(content)
 }
@@ -178,7 +184,7 @@ func (m Model) targetNamesWithBadges() []string {
 	domain := m.domains[m.domainCursor]
 	names := make([]string, len(domain.Targets))
 	for i, t := range domain.Targets {
-		key := domain.Name + "/" + t.Name
+		key := m.runKey(domain.Name, t.Name)
 		badge := ""
 		switch m.runStates[key] {
 		case runSuccess:

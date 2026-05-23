@@ -9,32 +9,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type configFile struct {
-	Domains []Domain `yaml:"domains"`
+type fileConfig struct {
+	Workspaces []Workspace `yaml:"workspaces"`
+	Domains    []Domain    `yaml:"domains"`
 }
 
-// LoadDomains reads the first config file found in the search path and returns
-// the domains defined there. Falls back to initialDomains if no file exists.
-// Returns an error (and initialDomains) if a file is found but cannot be parsed.
-func LoadDomains() ([]Domain, error) {
+// LoadWorkspaces reads the first config file found in the search path and returns
+// the workspaces defined there. Falls back to defaultWorkspaces if no file exists.
+// Returns an error (and defaultWorkspaces) if a file is found but cannot be parsed.
+func LoadWorkspaces() ([]Workspace, error) {
 	for _, p := range configPaths() {
 		data, err := os.ReadFile(p)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return initialDomains, fmt.Errorf("reading %s: %w", p, err)
+			return defaultWorkspaces, fmt.Errorf("reading %s: %w", p, err)
 		}
-		var cfg configFile
+		var cfg fileConfig
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return initialDomains, fmt.Errorf("parsing %s: %w", p, err)
+			return defaultWorkspaces, fmt.Errorf("parsing %s: %w", p, err)
 		}
-		if len(cfg.Domains) == 0 {
-			return initialDomains, fmt.Errorf("%s: no domains defined", p)
+		if len(cfg.Workspaces) > 0 {
+			return cfg.Workspaces, nil
 		}
-		return cfg.Domains, nil
+		if len(cfg.Domains) > 0 {
+			return []Workspace{{Domains: cfg.Domains}}, nil
+		}
+		return defaultWorkspaces, fmt.Errorf("%s: no domains or workspaces defined", p)
 	}
-	return initialDomains, nil
+	return defaultWorkspaces, nil
 }
 
 // configPaths returns candidate config file locations in priority order.

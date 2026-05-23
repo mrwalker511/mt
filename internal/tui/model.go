@@ -47,7 +47,10 @@ type Model struct {
 	domainCursor int
 	targetCursor int
 
-	domains  []Domain
+	domains       []Domain    // active workspace's domains
+	allWorkspaces []Workspace
+	workspaceIdx  int
+
 	quitting bool
 
 	output  string // last command output to display in right pane
@@ -55,19 +58,35 @@ type Model struct {
 	running bool   // true while a command is executing
 
 	liveStatus    map[string]string    // live probe results keyed by semantic name
-	runStates     map[string]runResult // last run outcome keyed by "DomainName/TargetName"
+	runStates     map[string]runResult // last run outcome keyed by runKey()
 	pendingTarget string               // key of the target currently executing
 }
 
-// New returns a freshly initialized Model. Domains are loaded from the user's
+// runKey returns a unique key for a target, scoped to the current workspace name.
+// When the workspace has no name (default single-workspace), the key is
+// "DomainName/TargetName" — identical to the pre-workspace format.
+func (m Model) runKey(domainName, targetName string) string {
+	ws := ""
+	if m.workspaceIdx < len(m.allWorkspaces) {
+		ws = m.allWorkspaces[m.workspaceIdx].Name
+	}
+	if ws == "" {
+		return domainName + "/" + targetName
+	}
+	return ws + "/" + domainName + "/" + targetName
+}
+
+// New returns a freshly initialized Model. Workspaces are loaded from the user's
 // config file if one exists; otherwise the built-in defaults are used.
 func New() Model {
-	domains, err := LoadDomains()
+	workspaces, err := LoadWorkspaces()
 	m := Model{
-		domains:    domains,
-		activePane: paneLeft,
-		liveStatus: make(map[string]string),
-		runStates:  make(map[string]runResult),
+		allWorkspaces: workspaces,
+		workspaceIdx:  0,
+		domains:       workspaces[0].Domains,
+		activePane:    paneLeft,
+		liveStatus:    make(map[string]string),
+		runStates:     make(map[string]runResult),
 	}
 	if err != nil {
 		m.output = "Config error: " + err.Error()

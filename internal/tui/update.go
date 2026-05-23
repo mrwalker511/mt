@@ -53,6 +53,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.output = ""
 			m.cmdErr = ""
 
+		case "tab":
+			if len(m.allWorkspaces) > 1 {
+				m.workspaceIdx = (m.workspaceIdx + 1) % len(m.allWorkspaces)
+				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
+				m.domainCursor = 0
+				m.targetCursor = 0
+				m.output = ""
+				m.cmdErr = ""
+			}
+
+		case "shift+tab":
+			if len(m.allWorkspaces) > 1 {
+				m.workspaceIdx = (m.workspaceIdx - 1 + len(m.allWorkspaces)) % len(m.allWorkspaces)
+				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
+				m.domainCursor = 0
+				m.targetCursor = 0
+				m.output = ""
+				m.cmdErr = ""
+			}
+
 		case "enter":
 			if m.running {
 				return m, nil
@@ -64,7 +84,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.domainCursor < len(m.domains) {
-				m.pendingTarget = m.domains[m.domainCursor].Name + "/" + target.Name
+				m.pendingTarget = m.runKey(m.domains[m.domainCursor].Name, target.Name)
 			}
 			m.running = true
 			m.output = ""

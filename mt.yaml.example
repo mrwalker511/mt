@@ -8,6 +8,27 @@
 #   status     — hint text shown in the right pane before any command runs
 #   cmd        — command and arguments to execute on Enter (omit to disable)
 #   launch_msg — message shown when cmd exits 0 with no output (e.g. "open -a" launchers)
+#
+# ─── Multi-workspace config (optional) ────────────────────────────────────────
+# Wrap domains inside named workspaces to switch contexts live with Tab / Shift+Tab.
+# Replace the flat "domains:" key below with a "workspaces:" key:
+#
+# workspaces:
+#   - name: "Team Alpha"
+#     domains:
+#       - name: "Context/Git"
+#         targets:
+#           - name: "Git Status"
+#             cmd: ["git", "status"]
+#   - name: "Team Beta"
+#     domains:
+#       - name: "Deploy"
+#         targets:
+#           - name: "Deploy Staging"
+#             cmd: ["./scripts/deploy.sh", "staging"]
+#
+# Press Tab / Shift+Tab in mt to cycle between workspaces.
+# ──────────────────────────────────────────────────────────────────────────────
 
 domains:
   - name: "App Launch"

@@ -554,3 +554,93 @@ func TestTargetNamesWithBadges_FailureBadge(t *testing.T) {
 		t.Errorf("expected ✗ badge, got %q", names[0])
 	}
 }
+
+// --- Workspace switching ---
+
+// testWorkspaceModel returns a model with 3 named workspaces for workspace tests.
+func testWorkspaceModel() Model {
+	ws := []Workspace{
+		{Name: "Alpha", Domains: []Domain{
+			{Name: "Domain A", Targets: []Target{{Name: "T1"}, {Name: "T2"}}},
+		}},
+		{Name: "Beta", Domains: []Domain{
+			{Name: "Domain B", Targets: []Target{{Name: "T3"}}},
+		}},
+		{Name: "Gamma", Domains: []Domain{
+			{Name: "Domain C", Targets: []Target{{Name: "T4"}, {Name: "T5"}, {Name: "T6"}}},
+		}},
+	}
+	return Model{
+		activePane:    paneLeft,
+		liveStatus:    make(map[string]string),
+		runStates:     make(map[string]runResult),
+		allWorkspaces: ws,
+		workspaceIdx:  0,
+		domains:       ws[0].Domains,
+	}
+}
+
+func TestUpdate_WorkspaceTab_CyclesForward(t *testing.T) {
+	m := testWorkspaceModel()
+	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.workspaceIdx != 1 {
+		t.Errorf("expected workspaceIdx=1 after tab, got %d", m.workspaceIdx)
+	}
+}
+
+func TestUpdate_WorkspaceShiftTab_CyclesPrev(t *testing.T) {
+	m := testWorkspaceModel()
+	m.workspaceIdx = 1
+	m.domains = m.allWorkspaces[1].Domains
+	m = press(m, tea.KeyMsg{Type: tea.KeyShiftTab})
+	if m.workspaceIdx != 0 {
+		t.Errorf("expected workspaceIdx=0 after shift+tab, got %d", m.workspaceIdx)
+	}
+}
+
+func TestUpdate_WorkspaceTab_Wraps(t *testing.T) {
+	m := testWorkspaceModel()
+	m.workspaceIdx = 2
+	m.domains = m.allWorkspaces[2].Domains
+	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.workspaceIdx != 0 {
+		t.Errorf("expected wrap to 0, got %d", m.workspaceIdx)
+	}
+}
+
+func TestUpdate_WorkspaceSwitch_ResetsCursors(t *testing.T) {
+	m := testWorkspaceModel()
+	m.domainCursor = 0
+	m.targetCursor = 1
+	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.domainCursor != 0 || m.targetCursor != 0 {
+		t.Errorf("expected cursors reset to 0, got domain=%d target=%d", m.domainCursor, m.targetCursor)
+	}
+}
+
+func TestUpdate_WorkspaceSwitch_ClearsOutput(t *testing.T) {
+	m := testWorkspaceModel()
+	m.output = "stale output"
+	m.cmdErr = "stale error"
+	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.output != "" || m.cmdErr != "" {
+		t.Error("expected output/cmdErr cleared on workspace switch")
+	}
+}
+
+func TestUpdate_WorkspaceTab_SingleWorkspace_NoOp(t *testing.T) {
+	m := Model{
+		activePane: paneLeft,
+		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
+		allWorkspaces: []Workspace{
+			{Name: "Only", Domains: []Domain{{Name: "D", Targets: []Target{{Name: "T"}}}}},
+		},
+		workspaceIdx: 0,
+		domains:      []Domain{{Name: "D", Targets: []Target{{Name: "T"}}}},
+	}
+	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.workspaceIdx != 0 {
+		t.Errorf("expected no change for single workspace, got idx=%d", m.workspaceIdx)
+	}
+}
