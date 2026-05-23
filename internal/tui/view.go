@@ -48,7 +48,7 @@ func (m Model) View() string {
 	)
 
 	bar := statusBarStyle.Width(m.width).Render(
-		"[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [q] Quit",
+		"[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [q] Quit",
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left, body, bar)
@@ -65,7 +65,7 @@ func (m Model) renderLeftPane(w, h int) string {
 func (m Model) renderMiddlePane(w, h int) string {
 	focused := m.activePane == paneMiddle
 	title   := titleStyle.Render("TARGETS & ACTIONS")
-	names   := m.targetNames()
+	names   := m.targetNamesWithBadges()
 	items   := m.renderList(names, m.targetCursor, focused)
 	content := lipgloss.JoinVertical(lipgloss.Left, title, items)
 	return paneStyle(focused).Width(w).Height(h).Render(content)
@@ -167,6 +167,28 @@ func (m Model) renderList(items []string, cursor int, paneActive bool) string {
 		}
 	}
 	return sb.String()
+}
+
+// targetNamesWithBadges returns target display names with a ✓/✗ badge appended
+// when the target has been executed in the current session.
+func (m Model) targetNamesWithBadges() []string {
+	if m.domainCursor >= len(m.domains) {
+		return []string{}
+	}
+	domain := m.domains[m.domainCursor]
+	names := make([]string, len(domain.Targets))
+	for i, t := range domain.Targets {
+		key := domain.Name + "/" + t.Name
+		badge := ""
+		switch m.runStates[key] {
+		case runSuccess:
+			badge = " ✓"
+		case runFailure:
+			badge = " ✗"
+		}
+		names[i] = t.Name + badge
+	}
+	return names
 }
 
 func (m Model) domainNames() []string {

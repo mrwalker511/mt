@@ -450,3 +450,107 @@ func TestTargetNames_EmptyDomains(t *testing.T) {
 		t.Errorf("expected empty slice for empty domains, got %v", names)
 	}
 }
+
+// --- c key (clear output) ---
+
+func TestUpdate_ClearKey_ClearsOutput(t *testing.T) {
+	m := Model{
+		output:     "some result",
+		cmdErr:     "some error",
+		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
+	}
+	m = press(m, key('c'))
+	if m.output != "" {
+		t.Errorf("expected output cleared, got %q", m.output)
+	}
+	if m.cmdErr != "" {
+		t.Errorf("expected cmdErr cleared, got %q", m.cmdErr)
+	}
+}
+
+func TestUpdate_ClearKey_NoopWhenEmpty(t *testing.T) {
+	m := Model{liveStatus: make(map[string]string), runStates: make(map[string]runResult)}
+	m = press(m, key('c'))
+	if m.output != "" || m.cmdErr != "" {
+		t.Error("expected empty model to stay empty after c")
+	}
+}
+
+// --- run badges ---
+
+func TestUpdate_Badge_SetOnSuccess(t *testing.T) {
+	m := Model{
+		running:       true,
+		pendingTarget: "Domain/Target",
+		liveStatus:    make(map[string]string),
+		runStates:     make(map[string]runResult),
+	}
+	m = send(m, cmdResultMsg{output: "ok"})
+	if m.runStates["Domain/Target"] != runSuccess {
+		t.Errorf("expected runSuccess, got %v", m.runStates["Domain/Target"])
+	}
+}
+
+func TestUpdate_Badge_SetOnFailure(t *testing.T) {
+	m := Model{
+		running:       true,
+		pendingTarget: "Domain/Target",
+		liveStatus:    make(map[string]string),
+		runStates:     make(map[string]runResult),
+	}
+	m = send(m, cmdResultMsg{output: "", err: errors.New("exit 1")})
+	if m.runStates["Domain/Target"] != runFailure {
+		t.Errorf("expected runFailure, got %v", m.runStates["Domain/Target"])
+	}
+}
+
+func TestUpdate_Badge_PendingTargetCleared(t *testing.T) {
+	m := Model{
+		running:       true,
+		pendingTarget: "Domain/Target",
+		liveStatus:    make(map[string]string),
+		runStates:     make(map[string]runResult),
+	}
+	m = send(m, cmdResultMsg{output: "done"})
+	if m.pendingTarget != "" {
+		t.Errorf("expected pendingTarget cleared, got %q", m.pendingTarget)
+	}
+}
+
+// --- targetNamesWithBadges ---
+
+func TestTargetNamesWithBadges_NoRuns(t *testing.T) {
+	m := Model{
+		domains:   []Domain{{Name: "D", Targets: []Target{{Name: "T1"}, {Name: "T2"}}}},
+		runStates: make(map[string]runResult),
+	}
+	names := m.targetNamesWithBadges()
+	for _, n := range names {
+		if strings.Contains(n, "✓") || strings.Contains(n, "✗") {
+			t.Errorf("expected no badge before any run, got %q", n)
+		}
+	}
+}
+
+func TestTargetNamesWithBadges_SuccessBadge(t *testing.T) {
+	m := Model{
+		domains:   []Domain{{Name: "D", Targets: []Target{{Name: "T1"}}}},
+		runStates: map[string]runResult{"D/T1": runSuccess},
+	}
+	names := m.targetNamesWithBadges()
+	if !strings.HasSuffix(names[0], " ✓") {
+		t.Errorf("expected ✓ badge, got %q", names[0])
+	}
+}
+
+func TestTargetNamesWithBadges_FailureBadge(t *testing.T) {
+	m := Model{
+		domains:   []Domain{{Name: "D", Targets: []Target{{Name: "T1"}}}},
+		runStates: map[string]runResult{"D/T1": runFailure},
+	}
+	names := m.targetNamesWithBadges()
+	if !strings.HasSuffix(names[0], " ✗") {
+		t.Errorf("expected ✗ badge, got %q", names[0])
+	}
+}
