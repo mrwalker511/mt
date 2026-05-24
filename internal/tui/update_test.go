@@ -808,3 +808,191 @@ func TestUpdate_HotReload_UpdatesWorkspaces(t *testing.T) {
 		t.Error("expected allWorkspaces to be populated after reload")
 	}
 }
+
+// --- Multi-select ---
+
+func testModelWithSelect() Model {
+	m := testModel()
+	m.selectedTargets = make(map[string]bool)
+	m.parallelOutputs = make(map[string]string)
+	m.activePane = paneMiddle
+	return m
+}
+
+func TestUpdate_SpaceTogglesSelection(t *testing.T) {
+	m := testModelWithSelect()
+	spaceMsg := tea.KeyMsg{Type: tea.KeySpace}
+
+	m = press(m, spaceMsg)
+	key := m.runKey("Domain A", "T1")
+	if !m.selectedTargets[key] {
+		t.Error("expected T1 to be selected after Space")
+	}
+
+	m = press(m, spaceMsg)
+	if m.selectedTargets[key] {
+		t.Error("expected T1 to be deselected after second Space")
+	}
+}
+
+func TestUpdate_SpaceOnlyWorksInMiddlePane(t *testing.T) {
+	m := testModelWithSelect()
+	m.activePane = paneLeft
+	spaceMsg := tea.KeyMsg{Type: tea.KeySpace}
+
+	m = press(m, spaceMsg)
+	if len(m.selectedTargets) != 0 {
+		t.Error("Space should not select when focused on left pane")
+	}
+}
+
+func TestUpdate_ReloadClearsSelection(t *testing.T) {
+	m := testModelWithSelect()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.selectedTargets[m.runKey("Domain A", "T1")] = true
+
+	m = press(m, key('R'))
+	if len(m.selectedTargets) != 0 {
+		t.Error("expected selectedTargets to be cleared on reload")
+	}
+}
+
+func TestUpdate_WorkspaceSwitchClearsSelection(t *testing.T) {
+	m := testModelWithSelect()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.allWorkspaces = []Workspace{
+		{Name: "WS1", Domains: m.domains},
+		{Name: "WS2", Domains: m.domains},
+	}
+	m.selectedTargets[m.runKey("Domain A", "T1")] = true
+
+	tabMsg := tea.KeyMsg{Type: tea.KeyTab}
+	m = press(m, tabMsg)
+	if len(m.selectedTargets) != 0 {
+		t.Error("expected selectedTargets to be cleared on workspace switch")
+	}
+}
+
+func TestUpdate_ParallelRun_CombinesOutput(t *testing.T) {
+	m := testModelWithSelect()
+	m.running = false
+
+	m = send(m, parallelCmdResultMsg{key: "k1", label: "Alpha", output: "out-a", err: nil})
+	if m.running {
+		t.Error("should not be done yet — second result pending")
+	}
+
+	// Simulate a second in-flight result arriving (set pending manually)
+	m.multiRunPending = 1
+	m.parallelOutputs["Beta"] = "out-b"
+	m = send(m, parallelCmdResultMsg{key: "k2", label: "Alpha", output: "out-a2", err: nil})
+	if m.running {
+		t.Error("should be done after last result")
+	}
+	if !strings.Contains(m.output, "=== Alpha ===") {
+		t.Errorf("expected combined output header, got: %q", m.output)
+	}
+}
+
+// --- Clipboard / Save messages ---
+
+func TestUpdate_ClipboardMsg_Success(t *testing.T) {
+	m := testModelWithSelect()
+	m = send(m, clipboardMsg{err: nil})
+	if m.cmdErr != "Copied to clipboard." {
+		t.Errorf("unexpected cmdErr: %q", m.cmdErr)
+	}
+}
+
+func TestUpdate_ClipboardMsg_Error(t *testing.T) {
+	m := testModelWithSelect()
+	m = send(m, clipboardMsg{err: errors.New("no tool")})
+	if !strings.Contains(m.cmdErr, "Copy failed") {
+		t.Errorf("expected 'Copy failed' in cmdErr, got: %q", m.cmdErr)
+	}
+}
+
+func TestUpdate_SaveOutputMsg_Success(t *testing.T) {
+	m := testModelWithSelect()
+	m = send(m, saveOutputMsg{path: "/home/user/.mt/logs/mt-20260524-120000.txt"})
+	if !strings.Contains(m.cmdErr, "Saved") {
+		t.Errorf("expected 'Saved' in cmdErr, got: %q", m.cmdErr)
+	}
+}
+
+func TestUpdate_SaveOutputMsg_Error(t *testing.T) {
+	m := testModelWithSelect()
+	m = send(m, saveOutputMsg{err: errors.New("disk full")})
+	if !strings.Contains(m.cmdErr, "Save failed") {
+		t.Errorf("expected 'Save failed' in cmdErr, got: %q", m.cmdErr)
+	}
+}
+
+// --- Sequence helpers ---
+
+func TestModel_ResolveSequenceTargets(t *testing.T) {
+	m := testModel()
+	m.selectedTargets = make(map[string]bool)
+
+	steps := m.resolveSequenceTargets([]string{"T3", "T1"})
+	if len(steps) != 2 {
+		t.Fatalf("got %d steps, want 2", len(steps))
+	}
+	if steps[0].Name != "T3" || steps[1].Name != "T1" {
+		t.Errorf("unexpected order: %v", []string{steps[0].Name, steps[1].Name})
+	}
+}
+
+func TestModel_ResolveSequenceTargets_SkipsMissing(t *testing.T) {
+	m := testModel()
+	m.selectedTargets = make(map[string]bool)
+
+	steps := m.resolveSequenceTargets([]string{"T1", "NonExistent"})
+	if len(steps) != 1 || steps[0].Name != "T1" {
+		t.Errorf("expected [T1], got %v", steps)
+	}
+}
+
+func TestModel_FindTargetByRunKey(t *testing.T) {
+	m := testModel()
+	m.selectedTargets = make(map[string]bool)
+
+	k := m.runKey("Domain A", "T2")
+	tgt, ok := m.findTargetByRunKey(k)
+	if !ok {
+		t.Fatal("expected to find T2")
+	}
+	if tgt.Name != "T2" {
+		t.Errorf("got %q, want T2", tgt.Name)
+	}
+
+	_, ok = m.findTargetByRunKey("no/such/key")
+	if ok {
+		t.Error("expected not found for unknown key")
+	}
+}
+
+// --- effectiveCmd ---
+
+func TestEffectiveCmd_NoHost(t *testing.T) {
+	tgt := Target{Cmd: []string{"echo", "hi"}}
+	got := effectiveCmd(tgt)
+	if len(got) != 2 || got[0] != "echo" {
+		t.Errorf("unexpected cmd: %v", got)
+	}
+}
+
+func TestEffectiveCmd_WithHost(t *testing.T) {
+	tgt := Target{Host: "user@host", Cmd: []string{"./deploy.sh", "prod"}}
+	got := effectiveCmd(tgt)
+	want := []string{"ssh", "user@host", "./deploy.sh", "prod"}
+	if len(got) != len(want) {
+		t.Fatalf("len: got %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d]: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}

@@ -228,6 +228,148 @@ func TestLoadWorkspaces_InvalidYAML_ReturnsDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadWorkspaces_Include_MergesDomains(t *testing.T) {
+	dir := t.TempDir()
+
+	included := `
+domains:
+  - name: "Included Domain"
+    targets:
+      - name: "Inc Target"
+        cmd: ["echo", "included"]
+`
+	incPath := filepath.Join(dir, "extra.yaml")
+	if err := os.WriteFile(incPath, []byte(included), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	main := `
+include:
+  - extra.yaml
+domains:
+  - name: "Main Domain"
+    targets:
+      - name: "Main Target"
+`
+	dest := filepath.Join(dir, "mt.yaml")
+	if err := os.WriteFile(dest, []byte(main), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	os.Chdir(dir)                         //nolint:errcheck
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	workspaces, err := LoadWorkspaces()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(workspaces) != 1 {
+		t.Fatalf("got %d workspaces, want 1", len(workspaces))
+	}
+	domains := workspaces[0].Domains
+	if len(domains) != 2 {
+		t.Fatalf("got %d domains, want 2 (main + included)", len(domains))
+	}
+	names := []string{domains[0].Name, domains[1].Name}
+	if !slices.Contains(names, "Main Domain") || !slices.Contains(names, "Included Domain") {
+		t.Errorf("unexpected domain names: %v", names)
+	}
+}
+
+func TestLoadWorkspaces_Include_CycleGuard(t *testing.T) {
+	dir := t.TempDir()
+
+	// a.yaml includes b.yaml which includes a.yaml — should not loop.
+	aPath := filepath.Join(dir, "a.yaml")
+	bPath := filepath.Join(dir, "b.yaml")
+	a := "include:\n  - b.yaml\ndomains:\n  - name: A\n    targets:\n      - name: TA\n"
+	b := "include:\n  - a.yaml\ndomains:\n  - name: B\n    targets:\n      - name: TB\n"
+	if err := os.WriteFile(aPath, []byte(a), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bPath, []byte(b), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := resolveConfig(aPath, make(map[string]bool))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Domains) == 0 {
+		t.Error("expected at least one domain from cyclic include")
+	}
+}
+
+func TestLoadWorkspaces_SSHHostField(t *testing.T) {
+	yaml := `
+domains:
+  - name: "Remote"
+    targets:
+      - name: "Deploy"
+        host: "user@prod.example.com"
+        cmd: ["./deploy.sh"]
+`
+	path := writeTemp(t, yaml)
+	dir := filepath.Dir(path)
+	dest := filepath.Join(dir, "mt.yaml")
+	if err := os.Rename(path, dest); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	os.Chdir(dir)                         //nolint:errcheck
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	workspaces, err := LoadWorkspaces()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	tgt := workspaces[0].Domains[0].Targets[0]
+	if tgt.Host != "user@prod.example.com" {
+		t.Errorf("host: got %q, want %q", tgt.Host, "user@prod.example.com")
+	}
+}
+
+func TestLoadWorkspaces_SequenceField(t *testing.T) {
+	yaml := `
+domains:
+  - name: "CI"
+    targets:
+      - name: "Full Pipeline"
+        sequence: ["Build", "Test", "Deploy"]
+      - name: "Build"
+        cmd: ["make", "build"]
+      - name: "Test"
+        cmd: ["make", "test"]
+      - name: "Deploy"
+        cmd: ["make", "deploy"]
+`
+	path := writeTemp(t, yaml)
+	dir := filepath.Dir(path)
+	dest := filepath.Join(dir, "mt.yaml")
+	if err := os.Rename(path, dest); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	os.Chdir(dir)                         //nolint:errcheck
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	workspaces, err := LoadWorkspaces()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	tgt := workspaces[0].Domains[0].Targets[0]
+	if tgt.Name != "Full Pipeline" {
+		t.Fatalf("unexpected target name: %q", tgt.Name)
+	}
+	if want := []string{"Build", "Test", "Deploy"}; !slices.Equal(tgt.Sequence, want) {
+		t.Errorf("sequence: got %v, want %v", tgt.Sequence, want)
+	}
+}
+
 func TestLoadWorkspaces_EmptyDomains_ReturnsDefaults(t *testing.T) {
 	path := writeTemp(t, "domains: []\n")
 

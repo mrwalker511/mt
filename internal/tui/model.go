@@ -20,6 +20,23 @@ type cmdResultMsg struct {
 	err    error
 }
 
+// parallelCmdResultMsg carries the result of one command in a parallel multi-select run.
+type parallelCmdResultMsg struct {
+	key    string // runKey of the target
+	label  string // display name for combined output header
+	output string
+	err    error
+}
+
+// clipboardMsg reports the outcome of a copy-to-clipboard operation.
+type clipboardMsg struct{ err error }
+
+// saveOutputMsg reports the outcome of saving output to a file.
+type saveOutputMsg struct {
+	path string
+	err  error
+}
+
 // tickMsg fires on each polling interval.
 type tickMsg time.Time
 
@@ -71,6 +88,15 @@ type Model struct {
 	scrollOffset  int                     // first visible line in right-pane output
 
 	showHelp bool // true when the ? help overlay is shown in the right pane
+
+	// multi-select (Space to toggle, Enter runs all in parallel)
+	selectedTargets map[string]bool   // set of runKeys checked for parallel execution
+	parallelOutputs map[string]string // per-label output accumulator during a parallel run
+	multiRunPending int               // number of parallel commands still in flight
+
+	// sequence execution (target.Sequence drives steps in order)
+	seqQueue  []Target // remaining steps not yet started
+	seqOutput string   // output accumulated from completed sequence steps
 }
 
 // hasGitDomain reports whether the active workspace has a Context/Git domain.
@@ -152,18 +178,50 @@ func New() Model {
 		domains = workspaces[0].Domains
 	}
 	m := Model{
-		allWorkspaces: workspaces,
-		workspaceIdx:  0,
-		domains:       domains,
-		activePane:    paneLeft,
-		liveStatus:    make(map[string]string),
-		runStates:     make(map[string]runResult),
-		targetOutputs: make(map[string]outputRecord),
+		allWorkspaces:   workspaces,
+		workspaceIdx:    0,
+		domains:         domains,
+		activePane:      paneLeft,
+		liveStatus:      make(map[string]string),
+		runStates:       make(map[string]runResult),
+		targetOutputs:   make(map[string]outputRecord),
+		selectedTargets: make(map[string]bool),
+		parallelOutputs: make(map[string]string),
 	}
 	if err != nil {
 		m.cmdErr = "Config error — using built-in defaults."
 	}
 	return m
+}
+
+// findTargetByRunKey searches the active workspace for a target matching key.
+func (m Model) findTargetByRunKey(key string) (Target, bool) {
+	for _, d := range m.domains {
+		for _, t := range d.Targets {
+			if m.runKey(d.Name, t.Name) == key {
+				return t, true
+			}
+		}
+	}
+	return Target{}, false
+}
+
+// resolveSequenceTargets returns the Target structs for each name in order,
+// searching all domains of the active workspace.
+func (m Model) resolveSequenceTargets(names []string) []Target {
+	lookup := make(map[string]Target)
+	for _, d := range m.domains {
+		for _, t := range d.Targets {
+			lookup[t.Name] = t
+		}
+	}
+	out := make([]Target, 0, len(names))
+	for _, n := range names {
+		if t, ok := lookup[n]; ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Init fires the initial status polls and starts the refresh tick.
