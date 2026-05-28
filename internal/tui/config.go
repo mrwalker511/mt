@@ -119,6 +119,10 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 		if !filepath.IsAbs(inc) {
 			inc = filepath.Join(dir, inc)
 		}
+		// Resolve symlinks so a link inside $HOME pointing outside cannot escape.
+		if real, err := filepath.EvalSymlinks(inc); err == nil {
+			inc = real
+		}
 		if home != "" && !strings.HasPrefix(inc, home+string(filepath.Separator)) {
 			return cfg, fmt.Errorf("include %s: path must be within home directory (%s)", inc, home)
 		}

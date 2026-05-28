@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// maxOutputBytes caps the output retained from any single command execution.
+// Output beyond this limit is truncated with a notice. Prevents OOM from
+// runaway commands that produce large amounts of data.
+const maxOutputBytes = 1 << 20 // 1 MB
 
 // validHostRe matches SSH destinations of the form [user@]hostname where
 // hostname is composed of alphanumerics, dots, hyphens, and percent signs
@@ -58,10 +64,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		cmds := []tea.Cmd{tickCmd()}
 		if m.hasGitDomain() {
-			cmds = append(cmds, pollGit())
+			cmds = append(cmds, pollGit(m.ctx))
 		}
 		if m.hasDockerDomain() {
-			cmds = append(cmds, pollDocker())
+			cmds = append(cmds, pollDocker(m.ctx))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -78,7 +84,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next := m.seqQueue[0]
 			m.seqQueue = m.seqQueue[1:]
 			execCmd := effectiveCmd(next)
-			return m, runCmd(execCmd, next.LaunchMsg)
+			return m, runCmd(m.ctx, execCmd, next.LaunchMsg)
 		}
 
 		// Sequence complete, sequence failed, or normal single command done.
@@ -148,6 +154,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			if m.cancel != nil {
+				m.cancel()
+			}
 			m.quitting = true
 			return m, tea.Quit
 
@@ -242,7 +251,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !ok || len(t.Cmd) == 0 {
 						continue
 					}
-					cmds = append(cmds, runParallelCmd(key, t.Name, effectiveCmd(t), t.LaunchMsg))
+					cmds = append(cmds, runParallelCmd(m.ctx, key, t.Name, effectiveCmd(t), t.LaunchMsg))
 				}
 				if len(cmds) == 0 {
 					m.cmdErr = "No executable targets selected."
@@ -279,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.output = ""
 				m.cmdErr = ""
 				m.showHelp = false
-				return m, runCmd(effectiveCmd(steps[0]), steps[0].LaunchMsg)
+				return m, runCmd(m.ctx, effectiveCmd(steps[0]), steps[0].LaunchMsg)
 			}
 
 			// Normal single command.
@@ -295,7 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.output = ""
 			m.cmdErr = ""
 			m.showHelp = false
-			return m, runCmd(effectiveCmd(target), target.LaunchMsg)
+			return m, runCmd(m.ctx, effectiveCmd(target), target.LaunchMsg)
 
 		case "left", "h":
 			if m.activePane > paneLeft {
@@ -393,13 +402,16 @@ func tickCmd() tea.Cmd {
 }
 
 // pollGit batches all git probes.
-func pollGit() tea.Cmd {
-	return tea.Batch(pollGitBranch(), pollGitDirty())
+func pollGit(ctx context.Context) tea.Cmd {
+	return tea.Batch(pollGitBranch(ctx), pollGitDirty(ctx))
 }
 
-func pollGitBranch() tea.Cmd {
+func pollGitBranch(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		out, err := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
 		if err != nil {
 			return statusUpdateMsg{key: "git.branch", status: ""}
 		}
@@ -407,9 +419,12 @@ func pollGitBranch() tea.Cmd {
 	}
 }
 
-func pollGitDirty() tea.Cmd {
+func pollGitDirty(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		out, err := exec.Command("git", "status", "--porcelain").Output() //nolint:gosec
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		out, err := exec.CommandContext(ctx, "git", "status", "--porcelain").Output() //nolint:gosec
 		if err != nil {
 			return statusUpdateMsg{key: "git.dirty", status: ""}
 		}
@@ -428,16 +443,19 @@ func pollGitDirty() tea.Cmd {
 }
 
 // pollDocker batches all docker container probes.
-func pollDocker() tea.Cmd {
+func pollDocker(ctx context.Context) tea.Cmd {
 	return tea.Batch(
-		pollDockerContainer("postgres"),
-		pollDockerContainer("redis"),
+		pollDockerContainer(ctx, "postgres"),
+		pollDockerContainer(ctx, "redis"),
 	)
 }
 
-func pollDockerContainer(name string) tea.Cmd {
+func pollDockerContainer(ctx context.Context, name string) tea.Cmd {
 	return func() tea.Msg {
-		out, err := exec.Command("docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		out, err := exec.CommandContext(ctx, "docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
 		status := "stopped"
 		if err == nil {
 			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
@@ -449,10 +467,17 @@ func pollDockerContainer(name string) tea.Cmd {
 }
 
 // runCmd executes cmd asynchronously and returns the result as a cmdResultMsg.
-func runCmd(cmd []string, launchMsg string) tea.Cmd {
+// ctx is used to cancel the command when the user quits.
+func runCmd(ctx context.Context, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
-		c := exec.Command(cmd[0], cmd[1:]...) //nolint:gosec
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
 		out, err := c.CombinedOutput()
+		if len(out) > maxOutputBytes {
+			out = append(out[:maxOutputBytes], []byte("\n…(output truncated at 1 MB)")...)
+		}
 		output := strings.TrimSpace(string(out))
 		if output == "" && err == nil {
 			if launchMsg != "" {
@@ -466,10 +491,17 @@ func runCmd(cmd []string, launchMsg string) tea.Cmd {
 }
 
 // runParallelCmd executes a command and wraps the result as a parallelCmdResultMsg.
-func runParallelCmd(key, label string, cmd []string, launchMsg string) tea.Cmd {
+// ctx is used to cancel the command when the user quits.
+func runParallelCmd(ctx context.Context, key, label string, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
-		c := exec.Command(cmd[0], cmd[1:]...) //nolint:gosec
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
 		out, err := c.CombinedOutput()
+		if len(out) > maxOutputBytes {
+			out = append(out[:maxOutputBytes], []byte("\n…(output truncated at 1 MB)")...)
+		}
 		output := strings.TrimSpace(string(out))
 		if output == "" && err == nil {
 			if launchMsg != "" {
@@ -518,8 +550,18 @@ func saveOutputToFile(output string) tea.Cmd {
 		}
 		ts := time.Now().Format("20060102-150405")
 		path := filepath.Join(dir, "mt-"+ts+".txt")
-		if err := os.WriteFile(path, []byte(output), 0640); err != nil {
-			return saveOutputMsg{err: fmt.Errorf("writing file: %w", err)}
+		// O_EXCL prevents following a symlink placed at this path (TOCTOU guard).
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
+		if err != nil {
+			return saveOutputMsg{err: fmt.Errorf("creating log file: %w", err)}
+		}
+		_, writeErr := f.WriteString(output)
+		closeErr := f.Close()
+		if writeErr != nil {
+			return saveOutputMsg{err: fmt.Errorf("writing log file: %w", writeErr)}
+		}
+		if closeErr != nil {
+			return saveOutputMsg{err: fmt.Errorf("closing log file: %w", closeErr)}
 		}
 		return saveOutputMsg{path: path}
 	}
