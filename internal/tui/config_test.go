@@ -482,6 +482,42 @@ func TestResolveConfig_Include_OutsideHome_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestLoadWorkspaces_WorldWritableInclude_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	incPath := filepath.Join(dir, "extra.yaml")
+	incContent := "domains:\n  - name: \"Inc\"\n    targets:\n      - name: T\n        cmd: [\"echo\", \"hi\"]\n"
+	if err := os.WriteFile(incPath, []byte(incContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(incPath, 0666); err != nil {
+		t.Fatal(err)
+	}
+
+	mainYAML := "include:\n  - extra.yaml\ndomains:\n  - name: Main\n    targets:\n      - name: T\n"
+	mainPath := filepath.Join(dir, "mt.yaml")
+	if err := os.WriteFile(mainPath, []byte(mainYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
+	os.Chdir(dir)                         //nolint:errcheck
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	workspaces, err := LoadWorkspaces()
+	if err == nil {
+		t.Error("expected error for world-writable included file")
+	}
+	if !strings.Contains(err.Error(), "world-writable") {
+		t.Errorf("expected 'world-writable' in error, got %q", err.Error())
+	}
+	if len(workspaces) != 1 || len(workspaces[0].Domains) != len(initialDomains) {
+		t.Error("expected fallback to default workspaces on world-writable include")
+	}
+}
+
 func TestResolveConfig_Include_Symlink_OutsideHome_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

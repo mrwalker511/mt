@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -994,5 +995,133 @@ func TestEffectiveCmd_WithHost(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("[%d]: got %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// --- Round 3: crash guards, output truncation, efficiency ---
+
+func TestUpdate_SequenceAdvance_EmptyCmd_ReturnsError(t *testing.T) {
+	m := Model{
+		running:    true,
+		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
+		seqQueue:   []Target{{Name: "EmptyStep"}}, // no Cmd or Host
+	}
+	_, cmd := m.Update(cmdResultMsg{output: "step1 done", err: nil})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for sequence advance with empty next step")
+	}
+	msg := cmd()
+	result, ok := msg.(cmdResultMsg)
+	if !ok {
+		t.Fatalf("expected cmdResultMsg, got %T", msg)
+	}
+	if result.err == nil {
+		t.Error("expected error for sequence step with no command")
+	}
+	if !strings.Contains(result.err.Error(), "EmptyStep") {
+		t.Errorf("expected step name in error, got %q", result.err.Error())
+	}
+}
+
+func TestRunCmd_EmptySlice_ReturnsError(t *testing.T) {
+	cmd := runCmd(context.Background(), nil, "")
+	msg := cmd()
+	result, ok := msg.(cmdResultMsg)
+	if !ok {
+		t.Fatalf("expected cmdResultMsg, got %T", msg)
+	}
+	if result.err == nil {
+		t.Error("expected error for empty command slice")
+	}
+}
+
+func TestRunCmd_LargeOutput_Truncates(t *testing.T) {
+	cmd := runCmd(context.Background(), []string{"sh", "-c", "yes | head -c 1100000"}, "")
+	msg := cmd()
+	result, ok := msg.(cmdResultMsg)
+	if !ok {
+		t.Fatalf("expected cmdResultMsg, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("unexpected error: %v", result.err)
+	}
+	if !strings.Contains(result.output, "truncated") {
+		t.Error("expected truncation notice in output for >1 MB command")
+	}
+}
+
+func TestRunParallelCmd_LargeOutput_Truncates(t *testing.T) {
+	cmd := runParallelCmd(context.Background(), "key1", "LargeLabel", []string{"sh", "-c", "yes | head -c 1100000"}, "")
+	msg := cmd()
+	result, ok := msg.(parallelCmdResultMsg)
+	if !ok {
+		t.Fatalf("expected parallelCmdResultMsg, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("unexpected error: %v", result.err)
+	}
+	if !strings.Contains(result.output, "truncated") {
+		t.Error("expected truncation notice in output for >1 MB parallel command")
+	}
+}
+
+func TestSaveTargetOutput_LargeOutput_Truncates(t *testing.T) {
+	m := testModel()
+	m.targetOutputs = make(map[string]outputRecord)
+	m.runStates = make(map[string]runResult)
+	m.output = strings.Repeat("x", maxCachedOutputBytes+1000)
+	m = m.saveTargetOutput()
+	k := m.runKey("Domain A", "T1")
+	rec, ok := m.targetOutputs[k]
+	if !ok {
+		t.Fatal("expected target output to be saved")
+	}
+	if len(rec.output) > maxCachedOutputBytes+100 {
+		t.Errorf("cached output too large: %d bytes (want ≤%d)", len(rec.output), maxCachedOutputBytes+100)
+	}
+	if !strings.Contains(rec.output, "truncated") {
+		t.Error("expected truncation notice in cached output")
+	}
+}
+
+func TestUpdate_SKey_TriggersCmd(t *testing.T) {
+	m := Model{
+		output:     "some command output",
+		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
+	}
+	_, cmd := m.Update(key('S'))
+	if cmd == nil {
+		t.Error("expected non-nil cmd when pressing S with output present")
+	}
+}
+
+func TestUpdate_SKey_NoOutput_IsNoop(t *testing.T) {
+	m := Model{
+		output:     "",
+		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
+	}
+	_, cmd := m.Update(key('S'))
+	if cmd != nil {
+		t.Error("expected nil cmd when pressing S with no output")
+	}
+}
+
+func TestUpdate_Quit_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := Model{
+		liveStatus: make(map[string]string),
+		runStates:  make(map[string]runResult),
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+	press(m, key('q'))
+	select {
+	case <-ctx.Done():
+		// context was cancelled as expected
+	default:
+		t.Error("expected context to be cancelled after pressing q")
 	}
 }
