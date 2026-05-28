@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -66,6 +67,9 @@ func LoadWorkspaces() ([]Workspace, error) {
 				}
 				workspaces[i] = Workspace{Name: wc.Name, Domains: domains}
 			}
+			if err := validateWorkspaces(workspaces); err != nil {
+				return defaultWorkspaces, err
+			}
 			return workspaces, nil
 		}
 		if len(cfg.Domains) > 0 {
@@ -73,7 +77,11 @@ func LoadWorkspaces() ([]Workspace, error) {
 			for i, dc := range cfg.Domains {
 				domains[i] = expandDomain(dc)
 			}
-			return []Workspace{{Domains: domains}}, nil
+			ws := []Workspace{{Domains: domains}}
+			if err := validateWorkspaces(ws); err != nil {
+				return defaultWorkspaces, err
+			}
+			return ws, nil
 		}
 		return defaultWorkspaces, fmt.Errorf("%s: no domains or workspaces defined", p)
 	}
@@ -92,6 +100,10 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 	}
 	visited[absPath] = true
 
+	if info, statErr := os.Stat(absPath); statErr == nil && info.Mode().Perm()&0002 != 0 {
+		return fileConfig{}, fmt.Errorf("refusing to load %s: file is world-writable", absPath)
+	}
+
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return fileConfig{}, fmt.Errorf("reading %s: %w", absPath, err)
@@ -101,10 +113,14 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 		return fileConfig{}, fmt.Errorf("parsing %s: %w", absPath, err)
 	}
 
+	home, _ := os.UserHomeDir()
 	dir := filepath.Dir(absPath)
 	for _, inc := range cfg.Include {
 		if !filepath.IsAbs(inc) {
 			inc = filepath.Join(dir, inc)
+		}
+		if home != "" && !strings.HasPrefix(inc, home+string(filepath.Separator)) {
+			return cfg, fmt.Errorf("include %s: path must be within home directory (%s)", inc, home)
 		}
 		incCfg, err := resolveConfig(inc, visited)
 		if err != nil {
