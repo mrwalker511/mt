@@ -18,6 +18,8 @@ type Target struct {
 	Status    string   `yaml:"status"`     // static hint shown before any execution
 	Cmd       []string `yaml:"cmd"`        // shell command to run on Enter; nil = not configured
 	LaunchMsg string   `yaml:"launch_msg"` // shown when Cmd succeeds but produces no output (e.g. open -a)
+	Sequence  []string `yaml:"sequence"`   // ordered list of target names to run in series
+	Host      string   `yaml:"host"`       // SSH host; if set, cmd is run via ssh host <cmd>
 }
 
 var initialDomains = []Domain{

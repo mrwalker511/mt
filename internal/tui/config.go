@@ -24,6 +24,7 @@ type workspaceConfig struct {
 }
 
 type fileConfig struct {
+	Include    []string          `yaml:"include"`
 	Workspaces []workspaceConfig `yaml:"workspaces"`
 	Domains    []domainConfig    `yaml:"domains"`
 }
@@ -46,18 +47,15 @@ func expandDomain(dc domainConfig) Domain {
 // LoadWorkspaces reads the first config file found in the search path and returns
 // the workspaces defined there. Falls back to defaultWorkspaces if no file exists.
 // Returns an error (and defaultWorkspaces) if a file is found but cannot be parsed.
+// Files may declare include: paths to merge domains/workspaces from other YAML files.
 func LoadWorkspaces() ([]Workspace, error) {
 	for _, p := range configPaths() {
-		data, err := os.ReadFile(p)
+		cfg, err := resolveConfig(p, make(map[string]bool))
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return defaultWorkspaces, fmt.Errorf("reading %s: %w", p, err)
-		}
-		var cfg fileConfig
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return defaultWorkspaces, fmt.Errorf("parsing %s: %w", p, err)
+			return defaultWorkspaces, err
 		}
 		if len(cfg.Workspaces) > 0 {
 			workspaces := make([]Workspace, len(cfg.Workspaces))
@@ -80,6 +78,42 @@ func LoadWorkspaces() ([]Workspace, error) {
 		return defaultWorkspaces, fmt.Errorf("%s: no domains or workspaces defined", p)
 	}
 	return defaultWorkspaces, nil
+}
+
+// resolveConfig loads a config file and recursively merges any include: entries into it.
+// visited guards against circular includes.
+func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fileConfig{}, fmt.Errorf("resolving path %s: %w", path, err)
+	}
+	if visited[absPath] {
+		return fileConfig{}, nil // cycle guard
+	}
+	visited[absPath] = true
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return fileConfig{}, fmt.Errorf("reading %s: %w", absPath, err)
+	}
+	var cfg fileConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return fileConfig{}, fmt.Errorf("parsing %s: %w", absPath, err)
+	}
+
+	dir := filepath.Dir(absPath)
+	for _, inc := range cfg.Include {
+		if !filepath.IsAbs(inc) {
+			inc = filepath.Join(dir, inc)
+		}
+		incCfg, err := resolveConfig(inc, visited)
+		if err != nil {
+			return cfg, fmt.Errorf("include %s: %w", inc, err)
+		}
+		cfg.Workspaces = append(cfg.Workspaces, incCfg.Workspaces...)
+		cfg.Domains = append(cfg.Domains, incCfg.Domains...)
+	}
+	return cfg, nil
 }
 
 // configPaths returns candidate config file locations in priority order.

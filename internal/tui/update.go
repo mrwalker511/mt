@@ -2,7 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,8 +39,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case cmdResultMsg:
+		output := strings.TrimSpace(msg.output)
+
+		// Sequence in progress and step succeeded: advance to next step.
+		if msg.err == nil && len(m.seqQueue) > 0 {
+			m.seqOutput += output + "\n"
+			next := m.seqQueue[0]
+			m.seqQueue = m.seqQueue[1:]
+			execCmd := effectiveCmd(next)
+			return m, runCmd(execCmd, next.LaunchMsg)
+		}
+
+		// Sequence complete, sequence failed, or normal single command done.
 		m.running = false
-		m.output = strings.TrimSpace(msg.output)
+		m.output = strings.TrimSpace(m.seqOutput + output)
+		m.seqOutput = ""
+		m.seqQueue = nil
 		m.scrollOffset = 0
 		if msg.err != nil {
 			m.cmdErr = msg.err.Error()
@@ -50,6 +68,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.pendingTarget = ""
+		return m, nil
+
+	case parallelCmdResultMsg:
+		out := strings.TrimSpace(msg.output)
+		if msg.err != nil {
+			m.runStates[msg.key] = runFailure
+			out += "\n[ERROR: " + msg.err.Error() + "]"
+		} else {
+			m.runStates[msg.key] = runSuccess
+		}
+		m.parallelOutputs[msg.label] = out
+		m.multiRunPending--
+		if m.multiRunPending == 0 {
+			m.running = false
+			labels := make([]string, 0, len(m.parallelOutputs))
+			for l := range m.parallelOutputs {
+				labels = append(labels, l)
+			}
+			sort.Strings(labels)
+			parts := make([]string, 0, len(labels))
+			for _, l := range labels {
+				parts = append(parts, "=== "+l+" ===\n"+m.parallelOutputs[l])
+			}
+			m.output = strings.Join(parts, "\n\n")
+			m.parallelOutputs = make(map[string]string)
+			m.pendingTarget = ""
+			m.scrollOffset = 0
+		}
+		return m, nil
+
+	case clipboardMsg:
+		if msg.err != nil {
+			m.cmdErr = "Copy failed: " + msg.err.Error()
+		} else {
+			m.cmdErr = "Copied to clipboard."
+		}
+		return m, nil
+
+	case saveOutputMsg:
+		if msg.err != nil {
+			m.cmdErr = "Save failed: " + msg.err.Error()
+		} else {
+			m.cmdErr = "Saved → " + msg.path
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -66,6 +128,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmdErr = ""
 			m.scrollOffset = 0
 
+		case "y":
+			if m.output != "" {
+				return m, copyToClipboard(m.output)
+			}
+
+		case "S":
+			if m.output != "" {
+				return m, saveOutputToFile(m.output)
+			}
+
+		case " ":
+			if m.activePane == paneMiddle {
+				if m.domainCursor < len(m.domains) {
+					targets := m.domains[m.domainCursor].Targets
+					if m.targetCursor < len(targets) {
+						t := targets[m.targetCursor]
+						key := m.runKey(m.domains[m.domainCursor].Name, t.Name)
+						if m.selectedTargets[key] {
+							delete(m.selectedTargets, key)
+						} else {
+							m.selectedTargets[key] = true
+						}
+					}
+				}
+			}
+
 		case "R":
 			workspaces, err := LoadWorkspaces()
 			m.allWorkspaces = workspaces
@@ -77,6 +165,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
 			m.targetOutputs = make(map[string]outputRecord)
+			m.selectedTargets = make(map[string]bool)
 			m.showHelp = false
 			if err != nil {
 				m.output, m.cmdErr = "", "Config reload error: "+err.Error()
@@ -92,6 +181,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
 				m.domainCursor = 0
 				m.targetCursor = 0
+				m.selectedTargets = make(map[string]bool)
 				m = m.restoreTargetOutput()
 				m.showHelp = false
 			}
@@ -103,6 +193,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
 				m.domainCursor = 0
 				m.targetCursor = 0
+				m.selectedTargets = make(map[string]bool)
 				m = m.restoreTargetOutput()
 				m.showHelp = false
 			}
@@ -111,8 +202,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.running {
 				return m, nil
 			}
+
+			// Multi-select: run all selected targets in parallel.
+			if len(m.selectedTargets) > 0 {
+				var cmds []tea.Cmd
+				for key := range m.selectedTargets {
+					t, ok := m.findTargetByRunKey(key)
+					if !ok || len(t.Cmd) == 0 {
+						continue
+					}
+					cmds = append(cmds, runParallelCmd(key, t.Name, effectiveCmd(t), t.LaunchMsg))
+				}
+				if len(cmds) == 0 {
+					m.cmdErr = "No executable targets selected."
+					return m, nil
+				}
+				m.multiRunPending = len(cmds)
+				m.parallelOutputs = make(map[string]string)
+				m.running = true
+				m.output = ""
+				m.cmdErr = ""
+				m.showHelp = false
+				m.selectedTargets = make(map[string]bool)
+				return m, tea.Batch(cmds...)
+			}
+
 			target, ok := m.currentTarget()
-			if !ok || len(target.Cmd) == 0 {
+			if !ok {
+				return m, nil
+			}
+
+			// Sequence target: run steps one by one in order.
+			if len(target.Sequence) > 0 {
+				steps := m.resolveSequenceTargets(target.Sequence)
+				if len(steps) == 0 || len(steps[0].Cmd) == 0 {
+					m.cmdErr = "Sequence has no executable steps."
+					return m, nil
+				}
+				if m.domainCursor < len(m.domains) {
+					m.pendingTarget = m.runKey(m.domains[m.domainCursor].Name, target.Name)
+				}
+				m.seqQueue = steps[1:]
+				m.seqOutput = ""
+				m.running = true
+				m.output = ""
+				m.cmdErr = ""
+				m.showHelp = false
+				return m, runCmd(effectiveCmd(steps[0]), steps[0].LaunchMsg)
+			}
+
+			// Normal single command.
+			if len(target.Cmd) == 0 {
 				m.output = ""
 				m.cmdErr = "No command configured for this target."
 				return m, nil
@@ -124,7 +264,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.output = ""
 			m.cmdErr = ""
 			m.showHelp = false
-			return m, runCmd(target.Cmd, target.LaunchMsg)
+			return m, runCmd(effectiveCmd(target), target.LaunchMsg)
 
 		case "left", "h":
 			if m.activePane > paneLeft {
@@ -206,6 +346,14 @@ func (m Model) currentTarget() (Target, bool) {
 	return targets[m.targetCursor], true
 }
 
+// effectiveCmd returns the command to run for a target, prepending ssh if Host is set.
+func effectiveCmd(t Target) []string {
+	if t.Host == "" {
+		return t.Cmd
+	}
+	return append([]string{"ssh", t.Host}, t.Cmd...)
+}
+
 // tickCmd schedules the next status poll cycle.
 func tickCmd() tea.Cmd {
 	return tea.Tick(pollInterval, func(t time.Time) tea.Msg {
@@ -283,5 +431,65 @@ func runCmd(cmd []string, launchMsg string) tea.Cmd {
 			}
 		}
 		return cmdResultMsg{output: output, err: err}
+	}
+}
+
+// runParallelCmd executes a command and wraps the result as a parallelCmdResultMsg.
+func runParallelCmd(key, label string, cmd []string, launchMsg string) tea.Cmd {
+	return func() tea.Msg {
+		c := exec.Command(cmd[0], cmd[1:]...) //nolint:gosec
+		out, err := c.CombinedOutput()
+		output := strings.TrimSpace(string(out))
+		if output == "" && err == nil {
+			if launchMsg != "" {
+				output = launchMsg
+			} else {
+				output = "(command completed — no output)"
+			}
+		}
+		return parallelCmdResultMsg{key: key, label: label, output: output, err: err}
+	}
+}
+
+// copyToClipboard writes text to the system clipboard asynchronously.
+func copyToClipboard(text string) tea.Cmd {
+	return func() tea.Msg {
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("pbcopy") //nolint:gosec
+		default:
+			if _, err := exec.LookPath("xclip"); err == nil {
+				cmd = exec.Command("xclip", "-selection", "clipboard") //nolint:gosec
+			} else if _, err := exec.LookPath("xsel"); err == nil {
+				cmd = exec.Command("xsel", "--clipboard", "--input") //nolint:gosec
+			} else if _, err := exec.LookPath("wl-copy"); err == nil {
+				cmd = exec.Command("wl-copy") //nolint:gosec
+			} else {
+				return clipboardMsg{err: fmt.Errorf("no clipboard tool found (install xclip, xsel, or wl-clipboard)")}
+			}
+		}
+		cmd.Stdin = strings.NewReader(text)
+		return clipboardMsg{err: cmd.Run()}
+	}
+}
+
+// saveOutputToFile writes output to a timestamped file under ~/.mt/logs/.
+func saveOutputToFile(output string) tea.Cmd {
+	return func() tea.Msg {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return saveOutputMsg{err: fmt.Errorf("home dir: %w", err)}
+		}
+		dir := filepath.Join(home, ".mt", "logs")
+		if err := os.MkdirAll(dir, 0750); err != nil {
+			return saveOutputMsg{err: fmt.Errorf("creating log dir: %w", err)}
+		}
+		ts := time.Now().Format("20060102-150405")
+		path := filepath.Join(dir, "mt-"+ts+".txt")
+		if err := os.WriteFile(path, []byte(output), 0640); err != nil {
+			return saveOutputMsg{err: fmt.Errorf("writing file: %w", err)}
+		}
+		return saveOutputMsg{path: path}
 	}
 }

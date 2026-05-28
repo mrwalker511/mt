@@ -48,7 +48,7 @@ func (m Model) View() string {
 		m.renderRightPane(rightW, contentH),
 	)
 
-	hint := "[↑↓/jk] Move  [←→/hl] Change Pane  [↵] Execute  [c] Clear  [?] Help  [R] Reload  [q] Quit"
+	hint := "[↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [y] Copy  [S] Save  [c] Clear  [?] Help  [R] Reload  [q] Quit"
 	if len(m.allWorkspaces) > 1 {
 		hint += "  [tab] Workspace"
 	}
@@ -130,7 +130,10 @@ func (m Model) renderHelp() string {
 		normalItemStyle.Render("  → / l        Focus right pane"),
 		"",
 		dimItemStyle.Render("Actions"),
-		normalItemStyle.Render("  Enter        Execute selected target"),
+		normalItemStyle.Render("  Enter        Run target (or all selected)"),
+		normalItemStyle.Render("  Space        Toggle target selection"),
+		normalItemStyle.Render("  y            Copy output to clipboard"),
+		normalItemStyle.Render("  S            Save output to ~/.mt/logs/"),
 		normalItemStyle.Render("  c            Clear output"),
 	}
 	if len(m.allWorkspaces) > 1 {
@@ -220,7 +223,7 @@ func (m Model) renderList(items []string, cursor int, paneActive bool) string {
 }
 
 // targetNamesWithBadges returns target display names with a ✓/✗ badge appended
-// when the target has been executed in the current session.
+// when the target has been executed, and a ◆ prefix when selected for parallel run.
 func (m Model) targetNamesWithBadges() []string {
 	if m.domainCursor >= len(m.domains) {
 		return []string{}
@@ -236,7 +239,11 @@ func (m Model) targetNamesWithBadges() []string {
 		case runFailure:
 			badge = " ✗"
 		}
-		names[i] = t.Name + badge
+		prefix := ""
+		if m.selectedTargets[key] {
+			prefix = "◆ "
+		}
+		names[i] = prefix + t.Name + badge
 	}
 	return names
 }
