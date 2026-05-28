@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -13,6 +14,36 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// validHostRe matches SSH destinations of the form [user@]hostname where
+// hostname is composed of alphanumerics, dots, hyphens, and percent signs
+// (percent-encoding for scoped IPv6). A leading dash would be interpreted by
+// SSH as an option flag, enabling ProxyCommand injection.
+var validHostRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._@%-]*$`)
+
+// validateHost returns an error if host is not a safe SSH destination.
+func validateHost(host string) error {
+	if !validHostRe.MatchString(host) {
+		return fmt.Errorf("invalid ssh host %q: must match [a-zA-Z0-9][a-zA-Z0-9._@%%-]*", host)
+	}
+	return nil
+}
+
+// validateWorkspaces returns an error if any target contains an invalid SSH host.
+func validateWorkspaces(workspaces []Workspace) error {
+	for _, ws := range workspaces {
+		for _, d := range ws.Domains {
+			for _, t := range d.Targets {
+				if t.Host != "" {
+					if err := validateHost(t.Host); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
 
 const pollInterval = 5 * time.Second
 
