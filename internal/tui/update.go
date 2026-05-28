@@ -84,6 +84,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next := m.seqQueue[0]
 			m.seqQueue = m.seqQueue[1:]
 			execCmd := effectiveCmd(next)
+			if len(execCmd) == 0 {
+				nextName := next.Name
+				return m, func() tea.Msg {
+					return cmdResultMsg{err: fmt.Errorf("sequence step %q has no command", nextName)}
+				}
+			}
 			return m, runCmd(m.ctx, execCmd, next.LaunchMsg)
 		}
 
@@ -411,7 +417,9 @@ func pollGitBranch(ctx context.Context) tea.Cmd {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		out, err := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
+		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(pollCtx, "git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
 		if err != nil {
 			return statusUpdateMsg{key: "git.branch", status: ""}
 		}
@@ -424,7 +432,9 @@ func pollGitDirty(ctx context.Context) tea.Cmd {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		out, err := exec.CommandContext(ctx, "git", "status", "--porcelain").Output() //nolint:gosec
+		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(pollCtx, "git", "status", "--porcelain").Output() //nolint:gosec
 		if err != nil {
 			return statusUpdateMsg{key: "git.dirty", status: ""}
 		}
@@ -455,7 +465,9 @@ func pollDockerContainer(ctx context.Context, name string) tea.Cmd {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		out, err := exec.CommandContext(ctx, "docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
+		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(pollCtx, "docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
 		status := "stopped"
 		if err == nil {
 			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
@@ -470,6 +482,9 @@ func pollDockerContainer(ctx context.Context, name string) tea.Cmd {
 // ctx is used to cancel the command when the user quits.
 func runCmd(ctx context.Context, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
+		if len(cmd) == 0 {
+			return cmdResultMsg{err: fmt.Errorf("no command to execute")}
+		}
 		if ctx == nil {
 			ctx = context.Background()
 		}
@@ -494,6 +509,9 @@ func runCmd(ctx context.Context, cmd []string, launchMsg string) tea.Cmd {
 // ctx is used to cancel the command when the user quits.
 func runParallelCmd(ctx context.Context, key, label string, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
+		if len(cmd) == 0 {
+			return parallelCmdResultMsg{key: key, label: label, err: fmt.Errorf("no command to execute")}
+		}
 		if ctx == nil {
 			ctx = context.Background()
 		}
