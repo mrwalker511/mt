@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mt — User Manual</title>
+  <style>
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2c2f3d;
+      --accent:   #7c9ef8;
+      --accent2:  #56c4a8;
+      --warn:     #e5a84b;
+      --danger:   #e56b6b;
+      --text:     #d4d8e8;
+      --muted:    #6b7190;
+      --code-bg:  #131620;
+      --radius:   6px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .layout { display: flex; min-height: 100vh; }
+    nav {
+      width: 230px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    main {
+      flex: 1;
+      max-width: 860px;
+      padding: 48px 48px 80px;
+    }
+
+    /* Nav */
+    .nav-logo {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: monospace;
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+      display: block;
+    }
+    nav ul { list-style: none; }
+    nav ul ul { padding-left: 14px; }
+    nav li a {
+      display: block;
+      padding: 5px 20px;
+      color: var(--muted);
+      font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    nav li a:hover { color: var(--text); border-color: var(--border); text-decoration: none; }
+    nav > ul > li > a { font-weight: 600; color: var(--text); font-size: 13px; padding-top: 8px; }
+
+    /* Content */
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    h1 .tagline { font-size: 16px; font-weight: 400; color: var(--muted); display: block; margin-top: 4px; }
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 52px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 28px 0 10px;
+    }
+    h4 { font-size: 14px; font-weight: 600; color: var(--muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .05em; }
+    p { margin-bottom: 14px; }
+
+    /* Code */
+    code {
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: var(--accent2);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    thead { background: var(--surface); }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: rgba(255,255,255,.018); }
+    td code { color: var(--accent); }
+
+    /* Callouts */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: rgba(124, 158, 248, .07);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    .callout.warn { border-color: var(--warn); background: rgba(229, 168, 75, .07); }
+    .callout.danger { border-color: var(--danger); background: rgba(229, 107, 107, .07); }
+    .callout strong { display: block; margin-bottom: 4px; }
+
+    /* UI diagram */
+    .diagram {
+      font-family: monospace;
+      font-size: 12.5px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      color: var(--text);
+      line-height: 1.55;
+      margin: 16px 0;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .diagram .hl { color: var(--accent); }
+    .diagram .dim { color: var(--muted); }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 3px;
+      vertical-align: middle;
+    }
+    .badge.macos { background: rgba(124,158,248,.2); color: var(--accent); }
+    .badge.linux { background: rgba(86,196,168,.2); color: var(--accent2); }
+
+    ul, ol { margin: 10px 0 14px 20px; }
+    li { margin-bottom: 4px; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+    .anchor { color: var(--muted); font-size: 14px; margin-left: 6px; opacity: 0; }
+    h2:hover .anchor, h3:hover .anchor { opacity: 1; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── Sidebar nav ─────────────────────────────────────────────────────── -->
+<nav>
+  <span class="nav-logo">mt</span>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#install">Installation</a>
+      <ul>
+        <li><a href="#install-go">go install</a></li>
+        <li><a href="#install-source">Build from source</a></li>
+      </ul>
+    </li>
+    <li><a href="#quickstart">Quick Start</a>
+      <ul>
+        <li><a href="#layout">3-pane layout</a></li>
+        <li><a href="#first-steps">First steps</a></li>
+      </ul>
+    </li>
+    <li><a href="#keys">Keyboard Reference</a></li>
+    <li><a href="#config">Configuration</a>
+      <ul>
+        <li><a href="#config-locations">File locations</a></li>
+        <li><a href="#config-structure">YAML structure</a></li>
+        <li><a href="#config-fields">Field reference</a></li>
+        <li><a href="#config-workspaces">Multi-workspace</a></li>
+        <li><a href="#config-apps">Apps shorthand</a></li>
+        <li><a href="#config-include">Include directive</a></li>
+      </ul>
+    </li>
+    <li><a href="#features">Features</a>
+      <ul>
+        <li><a href="#feat-single">Single command</a></li>
+        <li><a href="#feat-sequence">Sequence</a></li>
+        <li><a href="#feat-parallel">Multi-select parallel</a></li>
+        <li><a href="#feat-ssh">SSH targets</a></li>
+        <li><a href="#feat-live">Live status</a></li>
+        <li><a href="#feat-output">Output management</a></li>
+        <li><a href="#feat-reload">Hot reload</a></li>
+      </ul>
+    </li>
+    <li><a href="#defaults">Default Workspaces</a></li>
+    <li><a href="#security">Security Model</a></li>
+    <li><a href="#troubleshoot">Troubleshooting</a></li>
+  </ul>
+</nav>
+
+<!-- ── Main content ───────────────────────────────────────────────────── -->
+<main>
+
+<h1>mt — User Manual<span class="tagline">A keyboard-driven terminal workspace launcher</span></h1>
+
+<!-- ── Overview ─────────────────────────────────────────────────────── -->
+<h2 id="overview">Overview <a class="anchor" href="#overview">#</a></h2>
+<p><code>mt</code> is a keyboard-driven TUI (terminal UI) that turns your most-used commands into a fast, navigable menu. No mouse. No memorizing flags. Navigate a three-pane interface, press <code>Enter</code>, see output inline.</p>
+<p>Common uses:</p>
+<ul>
+  <li>Launch macOS apps without leaving the terminal</li>
+  <li>Run Docker compose, git, and dev-server commands from a single interface</li>
+  <li>Trigger multi-step deploy pipelines as a <em>sequence</em> — Build → Test → Deploy</li>
+  <li>Run multiple commands in <em>parallel</em> with Space + Enter</li>
+  <li>Execute commands on remote servers over SSH</li>
+</ul>
+
+<!-- ── Installation ─────────────────────────────────────────────────── -->
+<h2 id="install">Installation <a class="anchor" href="#install">#</a></h2>
+
+<h3 id="install-go">go install</h3>
+<p>Requires Go 1.21 or later.</p>
+<pre><code>go install github.com/mrwalker511/mt@latest</code></pre>
+<p>This places the <code>mt</code> binary in <code>$GOPATH/bin</code> (usually <code>~/go/bin</code>). Make sure that directory is on your <code>$PATH</code>.</p>
+
+<h3 id="install-source">Build from source</h3>
+<pre><code>git clone https://github.com/mrwalker511/mt
+cd mt
+make build   # produces ./mt in the project root</code></pre>
+<p>Other make targets:</p>
+<table>
+  <thead><tr><th>Command</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>make build</code></td><td>Compile binary to <code>./mt</code></td></tr>
+    <tr><td><code>make test</code></td><td>Run test suite</td></tr>
+    <tr><td><code>make vet</code></td><td>Run <code>go vet</code></td></tr>
+    <tr><td><code>make clean</code></td><td>Remove compiled binary</td></tr>
+  </tbody>
+</table>
+
+<!-- ── Quick Start ──────────────────────────────────────────────────── -->
+<h2 id="quickstart">Quick Start <a class="anchor" href="#quickstart">#</a></h2>
+<p>Run <code>mt</code> from any directory:</p>
+<pre><code>mt</code></pre>
+<p>If no config file is found, built-in defaults are shown (see <a href="#defaults">Default Workspaces</a>).</p>
+
+<h3 id="layout">3-pane layout</h3>
+<div class="diagram"><span class="dim">┌────────────────┬────────────────┬────────────────────────────────┐
+│</span> <span class="hl">Domains</span>        <span class="dim">│</span> <span class="hl">Targets</span>        <span class="dim">│</span> <span class="hl">Output / Status</span>                <span class="dim">│
+│                │                │                                │
+│ &gt; App Launch   │ &gt; Microsoft    │  Press [Enter] to launch       │
+│   Dev Tools    │   Notes        │                                │
+│   Infrastructure│  Safari       │                                │
+│   Context/Git  │   Terminal     │                                │
+│                │                │                                │
+│                │                │                                │
+└────────────────┴────────────────┴────────────────────────────────┘
+ [←/h focus left]  [→/l focus right]              [? help]</span></div>
+
+<ul>
+  <li><strong>Left pane</strong> — Domain list. Arrow keys or <code>j</code>/<code>k</code> move the cursor. Domains group related targets (e.g. "Outlook", "Infrastructure", "Context/Git").</li>
+  <li><strong>Middle pane</strong> — Target list for the selected domain. Press <code>Enter</code> to run, <code>Space</code> to toggle multi-select.</li>
+  <li><strong>Right pane</strong> — Command output, live status header, and hints. Scroll with <code>j</code>/<code>k</code> when focused here.</li>
+</ul>
+
+<h3 id="first-steps">First steps</h3>
+<ol>
+  <li>Press <code>→</code> or <code>l</code> to move focus to the middle pane.</li>
+  <li>Use <code>↑</code>/<code>↓</code> or <code>k</code>/<code>j</code> to select a target.</li>
+  <li>Press <code>Enter</code> to run it. Output appears in the right pane.</li>
+  <li>Press <code>?</code> at any time for a help overlay.</li>
+  <li>Press <code>q</code> or <code>Ctrl+C</code> to quit.</li>
+</ol>
+
+<!-- ── Keyboard Reference ───────────────────────────────────────────── -->
+<h2 id="keys">Keyboard Reference <a class="anchor" href="#keys">#</a></h2>
+<table>
+  <thead>
+    <tr><th>Key</th><th>Context</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>↑</code> / <code>k</code></td><td>Left pane</td><td>Move domain cursor up</td></tr>
+    <tr><td><code>↓</code> / <code>j</code></td><td>Left pane</td><td>Move domain cursor down</td></tr>
+    <tr><td><code>↑</code> / <code>k</code></td><td>Middle pane</td><td>Move target cursor up</td></tr>
+    <tr><td><code>↓</code> / <code>j</code></td><td>Middle pane</td><td>Move target cursor down</td></tr>
+    <tr><td><code>↑</code> / <code>k</code></td><td>Right pane</td><td>Scroll output up</td></tr>
+    <tr><td><code>↓</code> / <code>j</code></td><td>Right pane</td><td>Scroll output down</td></tr>
+    <tr><td><code>←</code> / <code>h</code></td><td>Any</td><td>Focus left pane</td></tr>
+    <tr><td><code>→</code> / <code>l</code></td><td>Any</td><td>Focus right pane</td></tr>
+    <tr><td><code>Enter</code></td><td>Middle pane</td><td>Execute selected target (or all multi-selected targets in parallel)</td></tr>
+    <tr><td><code>Space</code></td><td>Middle pane</td><td>Toggle multi-select on current target</td></tr>
+    <tr><td><code>Tab</code></td><td>Any</td><td>Switch to next workspace</td></tr>
+    <tr><td><code>Shift+Tab</code></td><td>Any</td><td>Switch to previous workspace</td></tr>
+    <tr><td><code>y</code></td><td>Any</td><td>Copy right-pane output to clipboard</td></tr>
+    <tr><td><code>S</code></td><td>Any</td><td>Save right-pane output to <code>~/.mt/logs/mt-TIMESTAMP.txt</code></td></tr>
+    <tr><td><code>c</code></td><td>Any</td><td>Clear right-pane output</td></tr>
+    <tr><td><code>R</code></td><td>Any</td><td>Reload config file without restarting</td></tr>
+    <tr><td><code>?</code></td><td>Any</td><td>Toggle help overlay</td></tr>
+    <tr><td><code>q</code> / <code>Ctrl+C</code></td><td>Any</td><td>Quit (cancels any running commands)</td></tr>
+  </tbody>
+</table>
+
+<!-- ── Configuration ────────────────────────────────────────────────── -->
+<h2 id="config">Configuration <a class="anchor" href="#config">#</a></h2>
+
+<h3 id="config-locations">File locations</h3>
+<p><code>mt</code> searches for a config file in this order, stopping at the first match:</p>
+<ol>
+  <li><strong>System config dir</strong> (platform-dependent):
+    <ul>
+      <li><span class="badge macos">macOS</span> &nbsp;<code>~/Library/Application Support/mt/config.yaml</code></li>
+      <li><span class="badge linux">Linux</span> &nbsp;<code>~/.config/mt/config.yaml</code></li>
+    </ul>
+  </li>
+  <li><strong>Local override</strong> — <code>./mt.yaml</code> in the current working directory</li>
+</ol>
+<p>If neither exists, built-in defaults are used. To create your own config:</p>
+<pre><code># macOS
+mkdir -p ~/Library/Application\ Support/mt
+cp mt.yaml.example ~/Library/Application\ Support/mt/config.yaml
+
+# Linux
+mkdir -p ~/.config/mt
+cp mt.yaml.example ~/.config/mt/config.yaml</code></pre>
+
+<div class="callout warn">
+  <strong>Local override caution</strong>
+  A <code>./mt.yaml</code> in the current directory overrides the system config. Only run <code>mt</code> inside directories you trust. Config files must not be world-writable — mt will refuse to load them if they are.
+</div>
+
+<h3 id="config-structure">YAML structure</h3>
+<pre><code># Single-workspace config (simplest form)
+domains:
+  - name: "My Project"
+    targets:
+      - name: "Start Server"
+        status: "Press [Enter] to start"
+        cmd: ["npm", "run", "dev"]
+      - name: "Run Tests"
+        cmd: ["npm", "test"]</code></pre>
+
+<pre><code># Multi-workspace config
+workspaces:
+  - name: "Microsoft"
+    domains:
+      - name: "Outlook"
+        targets:
+          - name: "New Email"
+            cmd: ["open", "ms-outlook://compose"]
+            launch_msg: "Opening new email…"
+  - name: "Dev"
+    domains:
+      - name: "Context/Git"
+        targets:
+          - name: "Git Status"
+            cmd: ["git", "status"]</code></pre>
+
+<h3 id="config-fields">Field reference</h3>
+<table>
+  <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>name</code></td><td>Yes</td><td>Display label for workspace, domain, or target</td></tr>
+    <tr><td><code>cmd</code></td><td>No</td><td>Command and arguments to execute on Enter, as a YAML list: <code>["git", "status"]</code>. Omit to make a target display-only.</td></tr>
+    <tr><td><code>status</code></td><td>No</td><td>Hint text shown in the right pane before the command has been run. Supports newlines.</td></tr>
+    <tr><td><code>launch_msg</code></td><td>No</td><td>Message shown when <code>cmd</code> exits successfully with no output (e.g. <code>open -a</code> produces no stdout).</td></tr>
+    <tr><td><code>host</code></td><td>No</td><td>SSH host in <code>[user@]hostname</code> form. If set, <code>cmd</code> is executed as <code>ssh host &lt;cmd&gt;</code>. See <a href="#feat-ssh">SSH targets</a>.</td></tr>
+    <tr><td><code>sequence</code></td><td>No</td><td>Ordered list of target names to run in series. If any step fails, the sequence stops. See <a href="#feat-sequence">Sequence</a>.</td></tr>
+    <tr><td><code>apps</code></td><td>No</td><td>macOS only. List of app names; each expands to an <code>open -a</code> target. Shorthand for common launchers. See <a href="#config-apps">Apps shorthand</a>.</td></tr>
+    <tr><td><code>include</code></td><td>No</td><td>List of YAML file paths to merge into this config. See <a href="#config-include">Include directive</a>.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="config-workspaces">Multi-workspace</h3>
+<p>Wrap your domains in a <code>workspaces:</code> block to switch between independent contexts with <code>Tab</code> / <code>Shift+Tab</code>. Each workspace has its own domains, targets, run history, and output cache.</p>
+<pre><code>workspaces:
+  - name: "Work"
+    domains:
+      - name: "Apps"
+        apps: ["Microsoft Outlook", "Microsoft Teams"]
+      - name: "Dev"
+        targets:
+          - name: "Build"
+            cmd: ["make", "build"]
+
+  - name: "Personal"
+    domains:
+      - name: "Apps"
+        apps: ["Mail", "Safari", "Spotify"]</code></pre>
+<p>Workspace switching resets cursor positions and clears multi-select. Per-target output is preserved per-workspace.</p>
+
+<h3 id="config-apps">Apps shorthand <span class="badge macos">macOS</span></h3>
+<p>The <code>apps:</code> key under a domain accepts a list of macOS app names. Each entry auto-expands to a full target that runs <code>open -a &lt;name&gt;</code>:</p>
+<pre><code>domains:
+  - name: "Apps"
+    apps:
+      - "Microsoft Outlook"
+      - "Microsoft Edge"
+      - "Slack"
+      - "Visual Studio Code"</code></pre>
+<p>Explicit <code>targets:</code> entries within the same domain come first; <code>apps:</code> expansions are appended after them.</p>
+
+<h3 id="config-include">Include directive</h3>
+<p>Split a large config into multiple files using <code>include:</code>:</p>
+<pre><code># ~/.config/mt/config.yaml
+include:
+  - work.yaml
+  - ~/shared/team-tools.yaml
+
+domains:
+  - name: "Personal"
+    targets:
+      - name: "Check Mail"
+        cmd: ["open", "-a", "Mail"]</code></pre>
+<p>Include rules:</p>
+<ul>
+  <li>Relative paths resolve relative to the file that declares them.</li>
+  <li>All paths (after resolving symlinks) must remain within your home directory (<code>$HOME</code>). Paths outside <code>$HOME</code> are rejected as a security measure.</li>
+  <li>Circular includes are detected and silently skipped.</li>
+  <li>Included <code>domains:</code> are merged; included <code>workspaces:</code> are appended.</li>
+</ul>
+
+<!-- ── Features ─────────────────────────────────────────────────────── -->
+<h2 id="features">Features <a class="anchor" href="#features">#</a></h2>
+
+<h3 id="feat-single">Single command</h3>
+<p>The default mode. Navigate to any target with a <code>cmd:</code> field and press <code>Enter</code>. The command runs asynchronously; the right pane shows output when it completes. While a command runs, a visual indicator shows it is in progress and <code>Enter</code> is ignored.</p>
+<p>Output is bounded to 1 MB. Longer output is automatically truncated with a notice.</p>
+
+<h3 id="feat-sequence">Sequence</h3>
+<p>A target with a <code>sequence:</code> field executes named targets in order. If any step exits non-zero, the sequence stops immediately.</p>
+<pre><code>domains:
+  - name: "CI"
+    targets:
+      - name: "Full Pipeline"
+        sequence: ["Build", "Test", "Deploy"]
+
+      - name: "Build"
+        cmd: ["make", "build"]
+      - name: "Test"
+        cmd: ["make", "test"]
+      - name: "Deploy"
+        cmd: ["./scripts/deploy.sh", "production"]</code></pre>
+<p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails).</p>
+
+<h3 id="feat-parallel">Multi-select parallel</h3>
+<p>Run multiple targets at the same time:</p>
+<ol>
+  <li>Focus the middle pane (<code>→</code> or <code>l</code>).</li>
+  <li>Press <code>Space</code> to toggle each target you want to run. A check mark appears next to selected targets.</li>
+  <li>Press <code>Enter</code> to run all selected targets in parallel.</li>
+</ol>
+<p>When all commands complete, output is shown with <code>=== Target Name ===</code> headers so you can identify each result. Selection is cleared automatically after execution.</p>
+
+<h3 id="feat-ssh">SSH targets</h3>
+<p>Set the <code>host:</code> field to run a command on a remote server:</p>
+<pre><code>domains:
+  - name: "Production"
+    targets:
+      - name: "Deploy"
+        host: "deploy@prod.example.com"
+        cmd: ["./deploy.sh", "--env", "production"]
+        launch_msg: "Deploy started…"
+
+      - name: "Tail Logs"
+        host: "app@prod.example.com"
+        cmd: ["journalctl", "-fu", "myapp"]</code></pre>
+<p>With <code>host:</code> set, mt runs <code>ssh host &lt;cmd&gt;</code>. SSH uses your existing key configuration (<code>~/.ssh/config</code>, <code>ssh-agent</code>). No credentials are stored by mt.</p>
+<div class="callout">
+  <strong>Host validation</strong>
+  The <code>host:</code> value must match <code>[a-zA-Z0-9][a-zA-Z0-9._@%-]*</code>. Values starting with <code>-</code> or containing spaces are rejected at config load time to prevent SSH option injection.
+</div>
+
+<h3 id="feat-live">Live status polling</h3>
+<p>When the active workspace contains certain named domains, mt polls for live status every 5 seconds and shows it in the right-pane header:</p>
+<table>
+  <thead><tr><th>Domain name</th><th>What is polled</th><th>Display</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>Context/Git</code></td>
+      <td><code>git rev-parse --abbrev-ref HEAD</code><br><code>git status --porcelain</code></td>
+      <td>Current branch + modified file count</td>
+    </tr>
+    <tr>
+      <td><code>Infrastructure</code></td>
+      <td><code>docker ps --filter name=postgres</code><br><code>docker ps --filter name=redis</code></td>
+      <td>Container status for postgres and redis</td>
+    </tr>
+  </tbody>
+</table>
+<p>Polling only runs for domains present in the current workspace and stops when you quit (all in-flight probes are cancelled).</p>
+
+<h3 id="feat-output">Output management</h3>
+<p>After a command runs, its output is shown in the right pane. Per-target output is cached in memory so navigating away and returning restores the previous result.</p>
+<table>
+  <thead><tr><th>Key</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>↑</code>/<code>k</code> (right pane)</td><td>Scroll up</td></tr>
+    <tr><td><code>↓</code>/<code>j</code> (right pane)</td><td>Scroll down</td></tr>
+    <tr><td><code>c</code></td><td>Clear output from the right pane</td></tr>
+    <tr><td><code>y</code></td><td>Copy output to clipboard</td></tr>
+    <tr><td><code>S</code></td><td>Save output to <code>~/.mt/logs/mt-YYYYMMDD-HHMMSS.txt</code></td></tr>
+  </tbody>
+</table>
+<p>Cached output per target is bounded at 256 KB. Log files are written with exclusive creation (<code>O_EXCL</code>) to prevent race conditions.</p>
+
+<h3 id="feat-reload">Config hot-reload</h3>
+<p>Press <code>R</code> to reload your config file without quitting. This lets you edit <code>mt.yaml</code> in a separate terminal and instantly see the changes in the running <code>mt</code> session.</p>
+<p>Hot-reload resets cursor positions, clears selections, and clears cached output. If the new config is invalid, an error is shown and the previous config continues in use.</p>
+
+<!-- ── Default Workspaces ────────────────────────────────────────────── -->
+<h2 id="defaults">Default Workspaces <a class="anchor" href="#defaults">#</a></h2>
+<p>When no config file is found, mt shows five built-in domains:</p>
+<table>
+  <thead><tr><th>Domain</th><th>Targets</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>App Launch</strong></td>
+      <td>Microsoft Word, Microsoft Excel, Notes, Safari, Terminal</td>
+    </tr>
+    <tr>
+      <td><strong>Dev Tools</strong></td>
+      <td>VS Code, iTerm2, Postman, TablePlus</td>
+    </tr>
+    <tr>
+      <td><strong>Infrastructure</strong></td>
+      <td>Docker Up, Docker Down, Postgres (status), Redis (status)</td>
+    </tr>
+    <tr>
+      <td><strong>RunLayer</strong></td>
+      <td>Deploy, Status, Logs, Rollback (no commands — placeholder for your config)</td>
+    </tr>
+    <tr>
+      <td><strong>Context/Git</strong></td>
+      <td>Git Status, Git Diff, Branches, Stash</td>
+    </tr>
+  </tbody>
+</table>
+<p>These defaults are mostly macOS-oriented. Create a config file to replace them with commands appropriate for your system.</p>
+
+<!-- ── Security Model ────────────────────────────────────────────────── -->
+<h2 id="security">Security Model <a class="anchor" href="#security">#</a></h2>
+<p><code>mt</code> is a local single-user tool. Its trust boundary is the config file: whoever can write the config can run arbitrary commands as the user who runs <code>mt</code>. The security controls below harden that boundary.</p>
+
+<h3>SSH host validation</h3>
+<p>The <code>host:</code> field is validated at config load time against the pattern <code>^[a-zA-Z0-9][a-zA-Z0-9._@%-]*$</code>. This rejects values starting with <code>-</code>, which SSH would interpret as option flags — the vector for ProxyCommand injection. A config containing an invalid host is rejected entirely and mt falls back to built-in defaults with an error message.</p>
+
+<h3>World-writable config rejection</h3>
+<p>Before reading any config file (including files loaded via <code>include:</code>), mt checks the file permissions. If the world-writable bit (<code>0002</code>) is set, mt refuses to load the file. On a shared or multi-user system this prevents another user from injecting commands by modifying a config file they can write to.</p>
+<p>If mt rejects your config with a "world-writable" error, fix it with:</p>
+<pre><code>chmod o-w ~/.config/mt/config.yaml</code></pre>
+
+<h3>Include path restrictions</h3>
+<p>Include paths (after resolving symlinks) must resolve within your home directory (<code>$HOME</code>). This prevents a malicious project's <code>./mt.yaml</code> from reading sensitive YAML files elsewhere on disk (e.g. <code>~/.kube/config</code>, <code>/etc/secrets.yaml</code>). Symlinks that point outside <code>$HOME</code> are also rejected.</p>
+
+<h3>Circular include protection</h3>
+<p>Include chains are tracked by canonical path. If a file has already been loaded in the current chain it is silently skipped, preventing infinite loops.</p>
+
+<h3>Command execution safety</h3>
+<p>Commands are always passed as argument arrays, never through a shell. <code>cmd: ["git", "status"]</code> calls <code>exec.Command("git", "status")</code>, not <code>sh -c "git status"</code>. This means shell metacharacters (<code>;</code>, <code>|</code>, <code>&amp;</code>, etc.) in arguments are always treated as literals, not shell syntax.</p>
+
+<h3>Output and cache bounds</h3>
+<p>Command output is truncated at 1 MB before being stored or displayed. Per-target cached output is limited to 256 KB. This prevents runaway commands from exhausting available memory.</p>
+
+<h3>Log file safe creation</h3>
+<p>Log files are created with <code>O_EXCL</code> (exclusive creation), which fails if anything — including a symlink — already exists at the target path. This closes a TOCTOU race that could otherwise be used to overwrite an arbitrary file.</p>
+<p>Log files are stored in <code>~/.mt/logs/</code> with mode <code>0640</code> (readable only by owner and group). The directory itself is created with mode <code>0750</code>.</p>
+
+<h3>Goroutine and process cancellation</h3>
+<p>All commands and polling operations use a shared <code>context.Context</code>. Pressing <code>q</code> or <code>Ctrl+C</code> cancels the context, which immediately terminates any in-flight <code>exec.Command</code> processes. No goroutines are left running after mt exits.</p>
+
+<!-- ── Troubleshooting ───────────────────────────────────────────────── -->
+<h2 id="troubleshoot">Troubleshooting <a class="anchor" href="#troubleshoot">#</a></h2>
+
+<h3>Config errors</h3>
+<table>
+  <thead><tr><th>Error message</th><th>Cause</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>"file is world-writable"</td>
+      <td>Config file has <code>0002</code> permission bit set</td>
+      <td><code>chmod o-w &lt;config-file&gt;</code></td>
+    </tr>
+    <tr>
+      <td>"invalid ssh host"</td>
+      <td><code>host:</code> value contains illegal characters or starts with <code>-</code></td>
+      <td>Use format <code>user@hostname</code> or plain <code>hostname</code></td>
+    </tr>
+    <tr>
+      <td>"path must be within home directory"</td>
+      <td><code>include:</code> path resolves outside <code>$HOME</code> or via a symlink that escapes <code>$HOME</code></td>
+      <td>Move the included file inside your home directory</td>
+    </tr>
+    <tr>
+      <td>"no domains or workspaces defined"</td>
+      <td>Config file is valid YAML but has no content</td>
+      <td>Add at least one domain with one target</td>
+    </tr>
+    <tr>
+      <td>"Config error — using built-in defaults"</td>
+      <td>Config file was found but could not be parsed</td>
+      <td>Check YAML syntax; run <code>cat config.yaml | python3 -c "import sys,yaml;yaml.safe_load(sys.stdin)"</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Clipboard not working</h3>
+<p>The <code>y</code> key copies output using a platform clipboard tool:</p>
+<ul>
+  <li><span class="badge macos">macOS</span> Uses <code>pbcopy</code> (built-in, always available)</li>
+  <li><span class="badge linux">Linux</span> Tries <code>xclip</code>, then <code>xsel</code>, then <code>wl-copy</code> (Wayland)</li>
+</ul>
+<p>On Linux, install one of these if copying doesn't work:</p>
+<pre><code># X11
+sudo apt install xclip
+# or
+sudo apt install xsel
+
+# Wayland
+sudo apt install wl-clipboard</code></pre>
+
+<h3>SSH commands fail immediately</h3>
+<p>mt does not handle SSH authentication. Ensure:</p>
+<ul>
+  <li>Your SSH key is loaded: <code>ssh-add ~/.ssh/id_ed25519</code></li>
+  <li>The host is reachable: <code>ssh user@hostname echo ok</code></li>
+  <li>SSH config in <code>~/.ssh/config</code> has the right settings for the host</li>
+</ul>
+
+<h3>Commands appear to hang</h3>
+<p>Some commands block waiting for stdin (e.g. interactive prompts). Since mt captures output without a TTY, the command may hang. Use non-interactive flags (e.g. <code>docker exec -it</code> → <code>docker exec</code>, <code>git commit</code> with <code>-m</code>). Quit mt (<code>q</code>) to cancel any in-flight command.</p>
+
+<h3>Terminal is too narrow</h3>
+<p>mt requires a minimum terminal width to render correctly. Widen your terminal window if you see a "terminal too narrow" message.</p>
+
+<h3>Hot-reload wipes run history</h3>
+<p>Pressing <code>R</code> resets all cursor positions and cached target output. This is intentional — the workspace structure may have changed. Run your commands again after reloading.</p>
+
+<hr>
+<p style="color:var(--muted);font-size:13px;">mt &nbsp;·&nbsp; <a href="https://github.com/mrwalker511/mt">github.com/mrwalker511/mt</a></p>
+
+</main>
+</div>
+</body>
+</html>

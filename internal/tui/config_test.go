@@ -481,3 +481,36 @@ func TestResolveConfig_Include_OutsideHome_ReturnsError(t *testing.T) {
 		t.Errorf("expected 'home directory' in error, got %q", err.Error())
 	}
 }
+
+func TestResolveConfig_Include_Symlink_OutsideHome_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	// Create a real file outside $HOME that the symlink will point to.
+	// EvalSymlinks requires the target to exist to resolve the real path.
+	outsideDir := t.TempDir() // this is also under /tmp, outside dir (our fake HOME)
+	targetPath := filepath.Join(outsideDir, "sensitive.yaml")
+	if err := os.WriteFile(targetPath, []byte("domains: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink inside $HOME pointing to the file outside $HOME.
+	linkPath := filepath.Join(dir, "evil-link.yaml")
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	mainYAML := "include:\n  - evil-link.yaml\ndomains:\n  - name: Main\n    targets:\n      - name: T\n"
+	mainPath := filepath.Join(dir, "mt.yaml")
+	if err := os.WriteFile(mainPath, []byte(mainYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := resolveConfig(mainPath, make(map[string]bool))
+	if err == nil {
+		t.Error("expected error when include symlink resolves outside home directory")
+	}
+	if !strings.Contains(err.Error(), "home directory") {
+		t.Errorf("expected 'home directory' in error, got %q", err.Error())
+	}
+}

@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"context"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// maxCachedOutputBytes caps the size of a single entry stored in targetOutputs.
+// Prevents the per-target output cache from growing unbounded across many runs.
+const maxCachedOutputBytes = 256 * 1024 // 256 KB
 
 type pane int
 
@@ -97,6 +102,10 @@ type Model struct {
 	// sequence execution (target.Sequence drives steps in order)
 	seqQueue  []Target // remaining steps not yet started
 	seqOutput string   // output accumulated from completed sequence steps
+
+	// ctx is cancelled when the user quits, terminating all in-flight commands.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // hasGitDomain reports whether the active workspace has a Context/Git domain.
@@ -143,12 +152,17 @@ func (m Model) rightPanePageSize() int {
 }
 
 // saveTargetOutput stores the current output/cmdErr under the active target's key.
+// Output is capped at maxCachedOutputBytes to bound per-target memory use.
 func (m Model) saveTargetOutput() Model {
 	if m.domainCursor < len(m.domains) {
 		targets := m.domains[m.domainCursor].Targets
 		if m.targetCursor < len(targets) {
 			key := m.runKey(m.domains[m.domainCursor].Name, targets[m.targetCursor].Name)
-			m.targetOutputs[key] = outputRecord{m.output, m.cmdErr}
+			out := m.output
+			if len(out) > maxCachedOutputBytes {
+				out = out[:maxCachedOutputBytes] + "\n…(cached output truncated)"
+			}
+			m.targetOutputs[key] = outputRecord{out, m.cmdErr}
 		}
 	}
 	return m
@@ -177,6 +191,7 @@ func New() Model {
 	if len(workspaces) > 0 {
 		domains = workspaces[0].Domains
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	m := Model{
 		allWorkspaces:   workspaces,
 		workspaceIdx:    0,
@@ -187,6 +202,8 @@ func New() Model {
 		targetOutputs:   make(map[string]outputRecord),
 		selectedTargets: make(map[string]bool),
 		parallelOutputs: make(map[string]string),
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 	if err != nil {
 		m.cmdErr = "Config error — using built-in defaults."
@@ -229,10 +246,10 @@ func (m Model) resolveSequenceTargets(names []string) []Target {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tickCmd()}
 	if m.hasGitDomain() {
-		cmds = append(cmds, pollGit())
+		cmds = append(cmds, pollGit(m.ctx))
 	}
 	if m.hasDockerDomain() {
-		cmds = append(cmds, pollDocker())
+		cmds = append(cmds, pollDocker(m.ctx))
 	}
 	return tea.Batch(cmds...)
 }
