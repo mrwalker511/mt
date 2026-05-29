@@ -24,15 +24,19 @@ mt
 
 | Key | Action |
 |-----|--------|
-| `↑` / `k` | Move up |
-| `↓` / `j` | Move down |
+| `↑` / `k` | Move up / scroll output up (right pane) |
+| `↓` / `j` | Move down / scroll output down (right pane) |
 | `←` / `h` | Focus left pane |
 | `→` / `l` | Focus right pane |
-| `Enter` | Execute selected target |
-| `c` | Clear output |
+| `Enter` | Execute selected target (or all multi-selected targets in parallel) |
+| `Space` | Toggle multi-select on current target (middle pane) |
+| `y` | Copy right-pane output to clipboard |
+| `S` | Save right-pane output to `~/.mt/logs/mt-TIMESTAMP.txt` |
+| `c` | Clear right-pane output |
+| `R` | Reload config file without restarting |
 | `?` | Toggle help overlay |
 | `Tab` / `Shift+Tab` | Switch workspace (when multiple workspaces configured) |
-| `q` / `Ctrl+C` | Quit |
+| `q` / `Ctrl+C` | Quit (cancels any running commands) |
 
 ## Configuration
 
@@ -68,6 +72,28 @@ domains:
       - name: "Run Tests"
         status: "Press [Enter] to run tests"
         cmd: ["npm", "test"]
+
+      # Sequence: runs Build → Test → Deploy in order; stops on first failure
+      - name: "Full Pipeline"
+        sequence: ["Build", "Test", "Deploy"]
+
+      # SSH target: runs the command on a remote host
+      - name: "Deploy"
+        host: "deploy@prod.example.com"
+        cmd: ["./deploy.sh", "--env", "production"]
+```
+
+**Include directive:** Split configs across files with `include:`:
+
+```yaml
+include:
+  - ~/shared/team-tools.yaml  # must resolve within $HOME
+
+domains:
+  - name: "Personal"
+    targets:
+      - name: "Check Mail"
+        cmd: ["open", "-a", "Mail"]
 ```
 
 **Mac app shorthand:** Use `apps:` to add launchers without writing the full command:
@@ -104,6 +130,17 @@ workspaces:
 ```
 
 See [`mt.yaml.example`](mt.yaml.example) for a full multi-workspace template with per-app actions for Outlook, Word, Excel, Edge, VS Code, and more.
+
+For the full field reference, include directive rules, sequence/parallel/SSH examples, and security model, see [`docs/manual.html`](docs/manual.html).
+
+## Security
+
+`mt` runs commands exactly as written in your config — no shell expansion. Protections applied at config load time:
+
+- Config files with world-writable permissions are rejected
+- `include:` paths must resolve within `$HOME` (symlinks checked)
+- SSH `host:` values are validated against `[a-zA-Z0-9][a-zA-Z0-9._@%-]*` to block option injection
+- Command output is bounded to 1 MB; per-target cache is bounded to 256 KB
 
 ## Development
 
