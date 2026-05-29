@@ -27,6 +27,9 @@
 #   status     — hint text shown in the right pane before any command runs
 #   cmd        — command and arguments to execute on Enter (omit to disable)
 #   launch_msg — message shown when cmd exits 0 with no output (e.g. open -a)
+#   sequence   — ordered list of target names to run in series (stops on failure)
+#   host       — SSH host ([user@]hostname); cmd is run as: ssh host <cmd>
+#   include    — (top-level) list of YAML files to merge; must be within $HOME
 
 # ── Example: multi-workspace config with per-app actions ──────────────────────
 
@@ -168,6 +171,19 @@ workspaces:
 
       - name: "RunLayer"
         targets:
+          # Sequence: runs Build → Test → Deploy Staging in order.
+          # Any step that exits non-zero stops the sequence.
+          - name: "Full Pipeline"
+            sequence: ["Build", "Test", "Deploy Staging"]
+
+          - name: "Build"
+            status: "Press [Enter] to build"
+            # cmd: ["make", "build"]
+
+          - name: "Test"
+            status: "Press [Enter] to run tests"
+            # cmd: ["make", "test"]
+
           - name: "Deploy Staging"
             status: "Press [Enter] to deploy to staging"
             # cmd: ["./scripts/deploy.sh", "staging"]
@@ -175,6 +191,13 @@ workspaces:
           - name: "Deploy Production"
             status: "Press [Enter] to deploy to production"
             # cmd: ["./scripts/deploy.sh", "production"]
+
+          # SSH target: cmd runs on the remote host via `ssh host <cmd>`
+          # host must match [a-zA-Z0-9][a-zA-Z0-9._@%-]* (no leading dash)
+          - name: "Tail Prod Logs"
+            status: "Stream live application logs from production"
+            # host: "deploy@prod.example.com"
+            # cmd: ["journalctl", "-fu", "myapp"]
 
           - name: "View Logs"
             status: "Press [Enter] to stream logs"
@@ -203,3 +226,18 @@ workspaces:
 #     targets:
 #       - name: "Git Status"
 #         cmd: ["git", "status"]
+
+# ── Include directive ──────────────────────────────────────────────────────────
+# Split large configs into multiple files. Included paths must resolve within
+# $HOME (symlinks are followed and checked). Relative paths resolve from the
+# directory of the file that declares them. Circular includes are skipped.
+#
+# include:
+#   - shared/team-tools.yaml          # relative to this file's directory
+#   - ~/work/configs/shared.yaml      # absolute path within $HOME
+#
+# domains:
+#   - name: "Local"
+#     targets:
+#       - name: "My Command"
+#         cmd: ["echo", "hello"]

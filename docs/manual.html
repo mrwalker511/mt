@@ -492,7 +492,7 @@ domains:
         cmd: ["make", "test"]
       - name: "Deploy"
         cmd: ["./scripts/deploy.sh", "production"]</code></pre>
-<p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails).</p>
+<p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails). A sequence step that has no <code>cmd:</code> field produces an error and stops the sequence.</p>
 
 <h3 id="feat-parallel">Multi-select parallel</h3>
 <p>Run multiple targets at the same time:</p>
@@ -539,7 +539,7 @@ domains:
     </tr>
   </tbody>
 </table>
-<p>Polling only runs for domains present in the current workspace and stops when you quit (all in-flight probes are cancelled).</p>
+<p>Polling only runs for domains present in the current workspace and stops when you quit (all in-flight probes are cancelled). Each probe has a 3-second timeout — on a slow machine or when Docker Desktop is stopped, polls complete quickly rather than blocking the UI.</p>
 
 <h3 id="feat-output">Output management</h3>
 <p>After a command runs, its output is shown in the right pane. Per-target output is cached in memory so navigating away and returning restores the previous result.</p>
