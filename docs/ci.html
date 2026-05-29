@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mt — CI/CD Manual</title>
+  <style>
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2c2f3d;
+      --accent:   #7c9ef8;
+      --accent2:  #56c4a8;
+      --warn:     #e5a84b;
+      --danger:   #e56b6b;
+      --text:     #d4d8e8;
+      --muted:    #6b7190;
+      --code-bg:  #131620;
+      --radius:   6px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .layout { display: flex; min-height: 100vh; }
+    nav {
+      width: 230px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    main {
+      flex: 1;
+      max-width: 860px;
+      padding: 48px 48px 80px;
+    }
+
+    /* Nav */
+    .nav-logo {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: monospace;
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+      display: block;
+    }
+    .nav-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      padding: 0 20px 8px;
+      display: block;
+    }
+    nav ul { list-style: none; }
+    nav ul ul { padding-left: 14px; }
+    nav li a {
+      display: block;
+      padding: 5px 20px;
+      color: var(--muted);
+      font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    nav li a:hover { color: var(--text); border-color: var(--border); text-decoration: none; }
+    nav > ul > li > a { font-weight: 600; color: var(--text); font-size: 13px; padding-top: 8px; }
+
+    /* Content */
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    h1 .tagline { font-size: 16px; font-weight: 400; color: var(--muted); display: block; margin-top: 4px; }
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 52px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 28px 0 10px;
+    }
+    h4 { font-size: 14px; font-weight: 600; color: var(--muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .05em; }
+    p { margin-bottom: 14px; }
+
+    /* Code */
+    code {
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: var(--accent2);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    thead { background: var(--surface); }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: rgba(255,255,255,.018); }
+    td code { color: var(--accent); }
+
+    /* Callouts */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: rgba(124, 158, 248, .07);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    .callout.warn { border-color: var(--warn); background: rgba(229, 168, 75, .07); }
+    .callout.danger { border-color: var(--danger); background: rgba(229, 107, 107, .07); }
+    .callout.success { border-color: var(--accent2); background: rgba(86, 196, 168, .07); }
+    .callout strong { display: block; margin-bottom: 4px; }
+
+    /* Step diagram */
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(124,158,248,.15);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-body { flex: 1; }
+    .step-name { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .step-desc { color: var(--muted); font-size: 12.5px; }
+    .step-arrow {
+      text-align: center;
+      color: var(--border);
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 0;
+    }
+
+    ul, ol { margin: 10px 0 14px 20px; }
+    li { margin-bottom: 4px; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+    .anchor { color: var(--muted); font-size: 14px; margin-left: 6px; opacity: 0; }
+    h2:hover .anchor, h3:hover .anchor { opacity: 1; }
+
+    .job-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-family: monospace;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .job-test  { background: rgba(124,158,248,.18); color: var(--accent); }
+    .job-build { background: rgba(86,196,168,.18);  color: var(--accent2); }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── Sidebar nav ─────────────────────────────────────────────────────── -->
+<nav>
+  <span class="nav-logo">mt</span>
+  <span class="nav-sub">CI/CD Manual</span>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#triggers">Triggers</a>
+      <ul>
+        <li><a href="#trigger-push">On push</a></li>
+        <li><a href="#trigger-pr">On pull request</a></li>
+      </ul>
+    </li>
+    <li><a href="#jobs">Jobs</a>
+      <ul>
+        <li><a href="#job-test">test job</a></li>
+        <li><a href="#job-build">build job</a></li>
+        <li><a href="#why-separate">Why two separate jobs</a></li>
+      </ul>
+    </li>
+    <li><a href="#steps">Step reference</a>
+      <ul>
+        <li><a href="#step-checkout">checkout</a></li>
+        <li><a href="#step-setup-go">setup-go</a></li>
+        <li><a href="#step-vet">go vet</a></li>
+        <li><a href="#step-test">go test</a></li>
+        <li><a href="#step-build">go build</a></li>
+      </ul>
+    </li>
+    <li><a href="#go-version">Go version management</a></li>
+    <li><a href="#caching">Dependency caching</a></li>
+    <li><a href="#reading-results">Reading results</a></li>
+    <li><a href="#extending">Extending the workflow</a></li>
+    <li><a href="#local-parity">Local parity</a></li>
+  </ul>
+</nav>
+
+<!-- ── Main content ───────────────────────────────────────────────────── -->
+<main>
+
+<h1>mt — CI/CD Manual<span class="tagline">GitHub Actions workflow reference</span></h1>
+
+<!-- ── Overview ─────────────────────────────────────────────────────── -->
+<h2 id="overview">Overview <a class="anchor" href="#overview">#</a></h2>
+<p><code>mt</code> uses a single GitHub Actions workflow file, <code>.github/workflows/ci.yml</code>, that runs automatically on every push and every pull request. It executes two parallel jobs — <span class="job-badge job-test">test</span> and <span class="job-badge job-build">build</span> — giving fast feedback on both code correctness and compilation.</p>
+
+<p>The workflow is intentionally minimal: no deployment, no release automation, no matrix builds. Its only job is to catch regressions before they land on <code>main</code>.</p>
+
+<pre><code>.github/
+└── workflows/
+    └── ci.yml   ← the only workflow file</code></pre>
+
+<!-- ── Triggers ──────────────────────────────────────────────────────── -->
+<h2 id="triggers">Triggers <a class="anchor" href="#triggers">#</a></h2>
+<p>The workflow runs on two event types:</p>
+
+<pre><code>on:
+  push:
+    branches: ["**"]
+  pull_request:</code></pre>
+
+<h3 id="trigger-push">On push — every branch</h3>
+<p><code>branches: ["**"]</code> matches every branch name without exception. This means CI runs the moment you push any commit anywhere — not just to <code>main</code> or protected branches.</p>
+<p><strong>Why:</strong> Developers working on feature branches get immediate feedback without waiting for a PR. A broken build on a long-running branch is caught before it diverges further from a working state. The cost is a few extra CI minutes per push, which is worthwhile for a small repo.</p>
+
+<h3 id="trigger-pr">On pull request</h3>
+<p>The bare <code>pull_request:</code> trigger fires on the following PR events by default: <code>opened</code>, <code>synchronize</code> (new commit pushed to a PR branch), and <code>reopened</code>. No branch filter is applied, so it covers PRs targeting any base branch.</p>
+<p><strong>Why:</strong> GitHub uses the PR check run results to gate merges. Branch protection rules can require the <span class="job-badge job-test">test</span> and <span class="job-badge job-build">build</span> checks to pass before a PR is mergeable. The <code>pull_request</code> trigger is what populates those required status checks.</p>
+
+<div class="callout">
+  <strong>Push + PR: is CI run twice?</strong>
+  When you push to a branch that has an open PR, both triggers fire — GitHub runs CI for the push event and again for the PR synchronize event. This is normal and harmless; it means the PR status check reflects the latest commit regardless of whether the PR was open at push time.
+</div>
+
+<!-- ── Jobs ───────────────────────────────────────────────────────────── -->
+<h2 id="jobs">Jobs <a class="anchor" href="#jobs">#</a></h2>
+<p>The workflow defines two independent jobs that run in parallel on separate runners:</p>
+
+<table>
+  <thead><tr><th>Job</th><th>Runner</th><th>Steps</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="job-badge job-test">test</span></td>
+      <td><code>ubuntu-latest</code></td>
+      <td>checkout → setup-go → <code>go vet</code> → <code>go test</code></td>
+      <td>Verify code correctness: static analysis and test suite</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-build">build</span></td>
+      <td><code>ubuntu-latest</code></td>
+      <td>checkout → setup-go → <code>go build</code></td>
+      <td>Verify the binary compiles cleanly from a clean checkout</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="job-test">test job</h3>
+<p>Runs static analysis with <code>go vet</code> followed by the full test suite with <code>go test</code>. Vet runs first because it is faster and catches issues that would otherwise produce confusing test failures (e.g. a misformatted <code>Printf</code> call or an unreachable code path).</p>
+
+<div class="pipeline">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-name">actions/checkout@v4</div>
+      <div class="step-desc">Clones the repository at the triggering commit into the runner workspace</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-name">actions/setup-go@v5</div>
+      <div class="step-desc">Installs the Go toolchain version declared in go.mod; restores module cache</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-name">go vet ./...</div>
+      <div class="step-desc">Static analysis across all packages — catches common mistakes before tests run</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <div class="step-name">go test ./...</div>
+      <div class="step-desc">Runs all test files; exits non-zero if any test fails or the build fails during test compilation</div>
+    </div>
+  </div>
+</div>
+
+<h3 id="job-build">build job</h3>
+<p>Compiles the final binary with <code>go build -o mt .</code>. This is the same command used locally (<code>make build</code>) so it confirms the exact artifact that would be distributed actually compiles.</p>
+
+<div class="pipeline">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-name">actions/checkout@v4</div>
+      <div class="step-desc">Fresh clone on a separate runner — no shared state with the test job</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-name">actions/setup-go@v5</div>
+      <div class="step-desc">Same Go version as the test job (both read go.mod)</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-name">go build -o mt .</div>
+      <div class="step-desc">Compiles the root package to a binary named <code>mt</code>; fails if any file has a compile error</div>
+    </div>
+  </div>
+</div>
+
+<h3 id="why-separate">Why two separate jobs?</h3>
+<p>Running <code>test</code> and <code>build</code> as independent jobs (not sequential steps in one job) has two concrete benefits:</p>
+<ol>
+  <li><strong>Parallelism.</strong> Both jobs start at the same time on separate runners. Total wall-clock CI time is determined by whichever finishes last, not their sum. On a cold runner this saves roughly 30–60 seconds per run.</li>
+  <li><strong>Distinct failure signals.</strong> If <code>test</code> fails and <code>build</code> passes, you know the tests themselves are broken, not compilation. If <code>build</code> fails but <code>test</code> passes, something in <code>main.go</code> or a non-test file has a compile error that tests did not exercise. The two signals are meaningfully different.</li>
+</ol>
+
+<div class="callout warn">
+  <strong>The build job does not run tests</strong>
+  <code>go build</code> compiles but does not execute test files. A test that panics at runtime will be caught by the <span class="job-badge job-test">test</span> job, not the <span class="job-badge job-build">build</span> job. Both checks must be green for a commit to be considered passing.
+</div>
+
+<!-- ── Step reference ─────────────────────────────────────────────────── -->
+<h2 id="steps">Step reference <a class="anchor" href="#steps">#</a></h2>
+
+<h3 id="step-checkout">actions/checkout@v4</h3>
+<p>Provided by GitHub. Clones the repository into <code>/home/runner/work/mt/mt</code> at the SHA that triggered the workflow. For push events this is the pushed commit; for pull requests it is the merge commit of the PR head into the base branch.</p>
+<p><strong>Why v4:</strong> Version 4 uses sparse checkouts by default and supports Git 2.18+ features. It is the current stable release and the one most Actions documentation refers to.</p>
+
+<h3 id="step-setup-go">actions/setup-go@v5</h3>
+<pre><code>- uses: actions/setup-go@v5
+  with:
+    go-version-file: go.mod
+    cache: true</code></pre>
+<p>Installs the Go toolchain and configures the module cache. Two options are set:</p>
+<table>
+  <thead><tr><th>Option</th><th>Value</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>go-version-file</code></td>
+      <td><code>go.mod</code></td>
+      <td>Reads the <code>go</code> directive from <code>go.mod</code> to pick the exact toolchain version — currently Go 1.24.7. No hardcoded version string in the workflow file; the workflow automatically tracks <code>go.mod</code> changes.</td>
+    </tr>
+    <tr>
+      <td><code>cache</code></td>
+      <td><code>true</code></td>
+      <td>Caches the Go module download cache (<code>$GOPATH/pkg/mod</code>) keyed on <code>go.sum</code>. Subsequent runs that do not change dependencies restore modules from cache instead of re-downloading from the internet. See <a href="#caching">Dependency caching</a>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="step-vet">go vet ./...</h3>
+<pre><code>- name: vet
+  run: go vet ./...</code></pre>
+<p><code>go vet</code> is the Go standard library's built-in static analyser. It runs a collection of checks that the compiler does not enforce but that almost always indicate bugs:</p>
+<ul>
+  <li><strong>Printf format/argument mismatch</strong> — e.g. <code>fmt.Sprintf("%d", "not an int")</code></li>
+  <li><strong>Unreachable code</strong> after <code>return</code>/<code>panic</code></li>
+  <li><strong>Struct tag syntax errors</strong> — malformed <code>yaml:</code> tags would silently break config parsing</li>
+  <li><strong>Copying of mutexes</strong> by value</li>
+  <li><strong>Incorrect use of <code>sync/atomic</code></strong></li>
+  <li><strong>Loop variable capture</strong> in goroutines (pre-Go 1.22)</li>
+</ul>
+<p>Vet runs before tests because its checks are cheap (no execution) and a vet failure on a <code>Sprintf</code> call often manifests as a confusing test failure rather than a clear error.</p>
+<p>The <code>./...</code> pattern matches every package in the module, including test packages.</p>
+
+<h3 id="step-test">go test ./...</h3>
+<pre><code>- name: test
+  run: go test ./...</code></pre>
+<p>Compiles and runs every <code>_test.go</code> file in the module. <code>./...</code> recursively descends into subdirectories, so this covers both <code>internal/tui/</code> (the main package) and any future packages added under the module root.</p>
+<p>Key behaviours of <code>go test</code> in this configuration:</p>
+<ul>
+  <li>Each package's tests run in a fresh binary — test failures in one package do not prevent other packages from running.</li>
+  <li>A non-zero exit from any test binary causes the overall step to fail.</li>
+  <li>Test binaries that panic are reported as failures, not crashes.</li>
+  <li>The race detector is <em>not</em> enabled here (no <code>-race</code> flag). The test suite can be run with <code>go test -race ./...</code> locally for deeper concurrency checking.</li>
+</ul>
+
+<div class="callout">
+  <strong>Coverage</strong>
+  No coverage report is generated or uploaded by this workflow. Test coverage can be inspected locally with <code>go test -cover ./...</code> or <code>go test -coverprofile=coverage.out ./... &amp;&amp; go tool cover -html=coverage.out</code>.
+</div>
+
+<h3 id="step-build">go build -o mt .</h3>
+<pre><code>- name: build
+  run: go build -o mt .</code></pre>
+<p>Compiles the module's root package (<code>main</code>) and all its transitive dependencies into a single binary named <code>mt</code>. The <code>-o mt</code> flag names the output file explicitly; without it Go would use the module name.</p>
+<p><strong>Why this step is separate from <code>go test</code>:</strong> <code>go test ./...</code> does compile all non-test packages to build the test binaries, so a compile error in a library package would surface there. However, <code>go build .</code> exercises the <code>main</code> package's linkage and any <code>//go:embed</code> directives independently, and it verifies the exact build command developers use locally matches CI.</p>
+<p>The produced <code>mt</code> binary is not archived or uploaded — this step exists purely as a compilation gate. No artifact is retained after the job finishes.</p>
+
+<!-- ── Go version management ──────────────────────────────────────────── -->
+<h2 id="go-version">Go version management <a class="anchor" href="#go-version">#</a></h2>
+<p>The Go version used by CI is determined entirely by the <code>go</code> directive in <code>go.mod</code>:</p>
+<pre><code>go 1.24.7</code></pre>
+<p>Because both jobs set <code>go-version-file: go.mod</code>, updating the minimum Go version in <code>go.mod</code> automatically changes the version used in CI on the next push — no workflow file edit needed.</p>
+
+<div class="callout warn">
+  <strong>Minimum vs. exact version</strong>
+  The <code>go</code> directive in <code>go.mod</code> sets the <em>minimum</em> language version required by the module. <code>actions/setup-go</code> interprets this as the exact version to install. If the directive says <code>go 1.24.7</code>, CI will install Go 1.24.7 specifically. To allow any patch release of 1.24, you would write <code>go 1.24</code> (without a patch version).
+</div>
+
+<p>To upgrade Go locally and in CI at the same time:</p>
+<pre><code>go mod edit -go 1.25.0
+go mod tidy
+git commit go.mod go.sum -m "chore: upgrade to Go 1.25.0"</code></pre>
+
+<!-- ── Dependency caching ──────────────────────────────────────────────── -->
+<h2 id="caching">Dependency caching <a class="anchor" href="#caching">#</a></h2>
+<p>With <code>cache: true</code> in <code>actions/setup-go@v5</code>, the action automatically saves and restores the Go module download cache (<code>$GOPATH/pkg/mod/cache</code>) between runs. The cache key is derived from the hash of <code>go.sum</code>.</p>
+
+<table>
+  <thead><tr><th>Scenario</th><th>Cache behaviour</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>No dependency changes since last run</td>
+      <td>Full cache hit — modules restored in seconds, no network I/O</td>
+    </tr>
+    <tr>
+      <td><code>go.sum</code> changed (new or updated dependency)</td>
+      <td>Cache miss — modules re-downloaded; new cache entry saved for future runs</td>
+    </tr>
+    <tr>
+      <td>First run ever, or cache evicted by GitHub</td>
+      <td>Cold download — takes 10–20 s for <code>mt</code>'s small dependency tree</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The <code>mt</code> module has a small dependency tree (Bubble Tea, Lipgloss, and their transitive deps). Even on a cold cache the download takes under 30 seconds. The cache primarily benefits push-heavy workflows where CI runs many times per day.</p>
+
+<div class="callout">
+  <strong>Cache is per-OS, per-architecture</strong>
+  GitHub Actions caches are scoped to the OS and architecture of the runner. Both jobs use <code>ubuntu-latest</code> (x86-64 Linux), so they share a cache. If you add a macOS or ARM job in the future, it will have a separate cache entry.
+</div>
+
+<!-- ── Reading results ────────────────────────────────────────────────── -->
+<h2 id="reading-results">Reading CI results <a class="anchor" href="#reading-results">#</a></h2>
+<p>After a push or PR event, CI results appear in two places:</p>
+
+<h3>On a pull request</h3>
+<p>The PR page shows a status checks section near the merge button. Each job (<span class="job-badge job-test">test</span> and <span class="job-badge job-build">build</span>) appears as a separate check. Click <strong>Details</strong> next to any check to open the full job log.</p>
+
+<h3>On a commit or branch</h3>
+<p>Navigate to <strong>Actions</strong> in the repository sidebar, or click the coloured dot next to a commit SHA. Green circle = all jobs passed. Red X = at least one job failed. Yellow dot = jobs in progress.</p>
+
+<h3>Interpreting failures</h3>
+<table>
+  <thead><tr><th>Failing job</th><th>Failing step</th><th>Likely cause</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="job-badge job-test">test</span></td>
+      <td><code>vet</code></td>
+      <td>Static analysis issue: mismatched Printf arguments, struct tag typo, mutex copy. Fix with <code>go vet ./...</code> locally.</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-test">test</span></td>
+      <td><code>test</code></td>
+      <td>A test assertion failed, or a package failed to compile for test. Run <code>go test ./...</code> locally; check for panics in test output.</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-build">build</span></td>
+      <td><code>build</code></td>
+      <td>The <code>main</code> package or one of its dependencies has a compile error not caught by tests. Run <code>go build -o /dev/null .</code> locally.</td>
+    </tr>
+    <tr>
+      <td>Either</td>
+      <td><code>setup-go</code></td>
+      <td>The Go version in <code>go.mod</code> is not yet available on GitHub-hosted runners (rare). Check the <code>actions/setup-go</code> release notes.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ── Extending the workflow ─────────────────────────────────────────── -->
+<h2 id="extending">Extending the workflow <a class="anchor" href="#extending">#</a></h2>
+<p>Common additions to consider as the project grows:</p>
+
+<h3>Enable the race detector</h3>
+<p>Replace the test step with:</p>
+<pre><code>- name: test
+  run: go test -race ./...</code></pre>
+<p>The race detector adds ~2× overhead and requires CGO. It is off by default to keep CI fast; enable it if concurrency bugs become a concern.</p>
+
+<h3>Add a coverage upload</h3>
+<pre><code>- name: test
+  run: go test -coverprofile=coverage.out ./...
+
+- name: upload coverage
+  uses: codecov/codecov-action@v4
+  with:
+    files: coverage.out</code></pre>
+
+<h3>Add a release job</h3>
+<p>To build release binaries for multiple platforms when a tag is pushed:</p>
+<pre><code>on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o mt-${{ matrix.goos }}-${{ matrix.goarch }} .</code></pre>
+
+<h3>Restrict CI to fewer branches</h3>
+<p>If the current all-branch trigger produces too many CI runs, narrow it:</p>
+<pre><code>on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:</code></pre>
+<p>Feature branches then only get CI when a PR is opened against them.</p>
+
+<div class="callout warn">
+  <strong>Secrets in workflows</strong>
+  The current workflow uses no secrets. If you add steps that require credentials (registry login, deployment keys), always store them in repository secrets (<strong>Settings → Secrets and variables → Actions</strong>) and reference them as <code>${{ secrets.MY_SECRET }}</code>. Never hardcode credentials in workflow YAML.
+</div>
+
+<!-- ── Local parity ────────────────────────────────────────────────────── -->
+<h2 id="local-parity">Local parity <a class="anchor" href="#local-parity">#</a></h2>
+<p>The CI steps map exactly to the <code>Makefile</code> targets. Running <code>make all</code> locally executes the same commands in the same order:</p>
+
+<table>
+  <thead><tr><th>CI step</th><th>Local equivalent</th><th>Make target</th></tr></thead>
+  <tbody>
+    <tr><td><code>go vet ./...</code></td><td><code>go vet ./...</code></td><td><code>make vet</code></td></tr>
+    <tr><td><code>go test ./...</code></td><td><code>go test ./...</code></td><td><code>make test</code></td></tr>
+    <tr><td><code>go build -o mt .</code></td><td><code>go build -o mt .</code></td><td><code>make build</code></td></tr>
+  </tbody>
+</table>
+
+<p>Running <code>make all</code> (or <code>make vet test build</code>) before pushing gives you high confidence that CI will pass. The only difference between local and CI is the operating system — CI runs on <code>ubuntu-latest</code>, while most contributors develop on macOS. Both are supported Go platforms with no platform-specific code paths in <code>mt</code>.</p>
+
+<div class="callout success">
+  <strong>Tip: run CI checks before pushing</strong>
+  <code>make all</code> runs vet, test, and build in sequence and exits non-zero on the first failure — the same behaviour as CI. Add it to a pre-push git hook to catch failures before they reach GitHub.
+</div>
+
+<hr>
+<p style="color:var(--muted);font-size:13px;">mt &nbsp;·&nbsp; <a href="https://github.com/mrwalker511/mt">github.com/mrwalker511/mt</a> &nbsp;·&nbsp; <a href="manual.html">User Manual</a></p>
+
+</main>
+</div>
+</body>
+</html>

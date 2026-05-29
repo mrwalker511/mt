@@ -131,7 +131,7 @@ workspaces:
 
 See [`mt.yaml.example`](mt.yaml.example) for a full multi-workspace template with per-app actions for Outlook, Word, Excel, Edge, VS Code, and more.
 
-For the full field reference, include directive rules, sequence/parallel/SSH examples, and security model, see [`docs/manual.html`](docs/manual.html).
+For the full field reference, include directive rules, sequence/parallel/SSH examples, and security model, see [`docs/manual.html`](docs/manual.html). For a detailed breakdown of the GitHub Actions CI workflow, see [`docs/ci.html`](docs/ci.html).
 
 ## Security
 
