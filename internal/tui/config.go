@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/mrwalker511/mt/internal/llm"
 )
 
 // domainConfig is used only during YAML parsing to capture the apps: shorthand.
@@ -28,6 +30,7 @@ type fileConfig struct {
 	Include    []string          `yaml:"include"`
 	Workspaces []workspaceConfig `yaml:"workspaces"`
 	Domains    []domainConfig    `yaml:"domains"`
+	LLM        llm.Config        `yaml:"llm"`
 }
 
 // expandDomain converts a domainConfig to a Domain, expanding each apps: entry
@@ -46,17 +49,17 @@ func expandDomain(dc domainConfig) Domain {
 }
 
 // LoadWorkspaces reads the first config file found in the search path and returns
-// the workspaces defined there. Falls back to defaultWorkspaces if no file exists.
-// Returns an error (and defaultWorkspaces) if a file is found but cannot be parsed.
-// Files may declare include: paths to merge domains/workspaces from other YAML files.
-func LoadWorkspaces() ([]Workspace, error) {
+// the workspaces and LLM config defined there. Falls back to defaultWorkspaces if
+// no file exists. Returns an error (and defaultWorkspaces) if a file is found but
+// cannot be parsed. Files may declare include: paths to merge domains/workspaces.
+func LoadWorkspaces() ([]Workspace, llm.Config, error) {
 	for _, p := range configPaths() {
 		cfg, err := resolveConfig(p, make(map[string]bool))
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return defaultWorkspaces, err
+			return defaultWorkspaces, llm.Config{}, err
 		}
 		if len(cfg.Workspaces) > 0 {
 			workspaces := make([]Workspace, len(cfg.Workspaces))
@@ -68,9 +71,9 @@ func LoadWorkspaces() ([]Workspace, error) {
 				workspaces[i] = Workspace{Name: wc.Name, Domains: domains}
 			}
 			if err := validateWorkspaces(workspaces); err != nil {
-				return defaultWorkspaces, err
+				return defaultWorkspaces, llm.Config{}, err
 			}
-			return workspaces, nil
+			return workspaces, cfg.LLM, nil
 		}
 		if len(cfg.Domains) > 0 {
 			domains := make([]Domain, len(cfg.Domains))
@@ -79,13 +82,13 @@ func LoadWorkspaces() ([]Workspace, error) {
 			}
 			ws := []Workspace{{Domains: domains}}
 			if err := validateWorkspaces(ws); err != nil {
-				return defaultWorkspaces, err
+				return defaultWorkspaces, llm.Config{}, err
 			}
-			return ws, nil
+			return ws, cfg.LLM, nil
 		}
-		return defaultWorkspaces, fmt.Errorf("%s: no domains or workspaces defined", p)
+		return defaultWorkspaces, llm.Config{}, fmt.Errorf("%s: no domains or workspaces defined", p)
 	}
-	return defaultWorkspaces, nil
+	return defaultWorkspaces, llm.Config{}, nil
 }
 
 // resolveConfig loads a config file and recursively merges any include: entries into it.

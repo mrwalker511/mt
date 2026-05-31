@@ -48,12 +48,20 @@ func (m Model) View() string {
 		m.renderRightPane(rightW, contentH),
 	)
 
-	hint := "[↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [y] Copy  [S] Save  [c] Clear  [?] Help  [R] Reload  [q] Quit"
-	if len(m.allWorkspaces) > 1 {
-		hint += "  [tab] Workspace"
-	}
-	if m.activePane == paneRight && m.output != "" {
-		hint += "  [j/k] Scroll"
+	var hint string
+	switch {
+	case m.inputMode:
+		hint = "AI › " + m.inputBuf + "█   [Esc] cancel"
+	case m.llmPending:
+		hint = "AI › thinking…   [Esc] cancel"
+	default:
+		hint = "[↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [/] AI  [y] Copy  [S] Save  [c] Clear  [?] Help  [R] Reload  [q] Quit"
+		if len(m.allWorkspaces) > 1 {
+			hint += "  [tab] Workspace"
+		}
+		if m.activePane == paneRight && m.output != "" {
+			hint += "  [j/k] Scroll"
+		}
 	}
 	bar := statusBarStyle.Width(m.width).Render(hint)
 
@@ -143,6 +151,7 @@ func (m Model) renderHelp() string {
 		)
 	}
 	lines = append(lines,
+		normalItemStyle.Render("  /            Open AI assistant prompt"),
 		normalItemStyle.Render("  ?            Toggle this help"),
 		normalItemStyle.Render("  q / Ctrl+C   Quit"),
 	)
