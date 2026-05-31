@@ -27,7 +27,7 @@ func TestLoadWorkspaces_NoFile_ReturnsDefaults(t *testing.T) {
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
 	os.Chdir(t.TempDir())                //nolint:errcheck
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -65,7 +65,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +116,7 @@ workspaces:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,7 +146,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -190,7 +190,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestLoadWorkspaces_InvalidYAML_ReturnsDefaults(t *testing.T) {
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err == nil {
 		t.Error("expected error for invalid YAML")
 	}
@@ -263,7 +263,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -325,7 +325,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -360,7 +360,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestLoadWorkspaces_EmptyDomains_ReturnsDefaults(t *testing.T) {
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err == nil {
 		t.Error("expected error for empty domains list")
 	}
@@ -418,7 +418,7 @@ domains:
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err == nil {
 		t.Error("expected error for invalid SSH host")
 	}
@@ -448,7 +448,7 @@ func TestLoadWorkspaces_WorldWritableConfig_ReturnsError(t *testing.T) {
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err == nil {
 		t.Error("expected error for world-writable config")
 	}
@@ -506,7 +506,7 @@ func TestLoadWorkspaces_WorldWritableInclude_ReturnsError(t *testing.T) {
 	os.Chdir(dir)                         //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	workspaces, err := LoadWorkspaces()
+	workspaces, _, err := LoadWorkspaces()
 	if err == nil {
 		t.Error("expected error for world-writable included file")
 	}
@@ -515,6 +515,39 @@ func TestLoadWorkspaces_WorldWritableInclude_ReturnsError(t *testing.T) {
 	}
 	if len(workspaces) != 1 || len(workspaces[0].Domains) != len(initialDomains) {
 		t.Error("expected fallback to default workspaces on world-writable include")
+	}
+}
+
+func TestLoadWorkspaces_LLMConfig_Parsed(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	cfg := filepath.Join(dir, "mt.yaml")
+	if err := os.WriteFile(cfg, []byte(`
+llm:
+  provider: ollama
+  model: mistral
+  base_url: http://localhost:11434
+domains:
+  - name: Test
+    targets:
+      - name: Echo
+        cmd: ["echo", "hi"]
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chdir(dir)
+	_, llmCfg, err := LoadWorkspaces()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llmCfg.Provider != "ollama" {
+		t.Errorf("expected provider 'ollama', got %q", llmCfg.Provider)
+	}
+	if llmCfg.Model != "mistral" {
+		t.Errorf("expected model 'mistral', got %q", llmCfg.Model)
+	}
+	if llmCfg.BaseURL != "http://localhost:11434" {
+		t.Errorf("expected base_url 'http://localhost:11434', got %q", llmCfg.BaseURL)
 	}
 }
 

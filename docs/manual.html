@@ -242,8 +242,10 @@
         <li><a href="#feat-live">Live status</a></li>
         <li><a href="#feat-output">Output management</a></li>
         <li><a href="#feat-reload">Hot reload</a></li>
+        <li><a href="#feat-ai">AI assistant</a></li>
       </ul>
     </li>
+    <li><a href="#config-llm">LLM configuration</a></li>
     <li><a href="#defaults">Default Workspaces</a></li>
     <li><a href="#security">Security Model</a></li>
     <li><a href="#troubleshoot">Troubleshooting</a></li>
@@ -348,6 +350,8 @@ make build   # produces ./mt in the project root</code></pre>
     <tr><td><code>S</code></td><td>Any</td><td>Save right-pane output to <code>~/.mt/logs/mt-TIMESTAMP.txt</code></td></tr>
     <tr><td><code>c</code></td><td>Any</td><td>Clear right-pane output</td></tr>
     <tr><td><code>R</code></td><td>Any</td><td>Reload config file without restarting</td></tr>
+    <tr><td><code>/</code></td><td>Any</td><td>Open AI assistant prompt bar (natural-language input)</td></tr>
+    <tr><td><code>Esc</code></td><td>AI prompt</td><td>Cancel AI input or cancel in-flight AI request</td></tr>
     <tr><td><code>?</code></td><td>Any</td><td>Toggle help overlay</td></tr>
     <tr><td><code>q</code> / <code>Ctrl+C</code></td><td>Any</td><td>Quit (cancels any running commands)</td></tr>
   </tbody>
@@ -560,27 +564,97 @@ domains:
 <p>Press <code>R</code> to reload your config file without quitting. This lets you edit <code>mt.yaml</code> in a separate terminal and instantly see the changes in the running <code>mt</code> session.</p>
 <p>Hot-reload resets cursor positions, clears selections, and clears cached output. If the new config is invalid, an error is shown and the previous config continues in use.</p>
 
+<h3 id="feat-ai">AI assistant</h3>
+<p>Press <code>/</code> to open the AI prompt bar at the bottom of the screen. Type a natural-language request and press <code>Enter</code>. The local LLM maps your query to one of three actions:</p>
+<table>
+  <thead><tr><th>LLM response</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td><code>RUN:&lt;target_name&gt;</code></td><td>Runs the named target from the current workspace (same as navigating to it and pressing Enter)</td></tr>
+    <tr><td><code>CMD:["prog","arg",…]</code></td><td>Executes the returned command array directly — useful for dynamically generated osascript or shell commands</td></tr>
+    <tr><td><code>INFO:&lt;text&gt;</code></td><td>Displays a short text answer in the right pane</td></tr>
+  </tbody>
+</table>
+<p>Example requests:</p>
+<ul>
+  <li><code>open outlook</code> → runs the <em>Open Outlook</em> target</li>
+  <li><code>create a 30-min meeting with john@company.com tomorrow at 2pm</code> → generates and runs an osascript that creates the event in Outlook</li>
+  <li><code>what does git stash do</code> → returns a short explanation</li>
+  <li><code>start docker and check postgres</code> → runs <em>Docker Up</em> then <em>Postgres</em> if they exist as targets</li>
+</ul>
+<p>Press <code>Esc</code> to cancel the input or cancel an in-flight request. Requires Ollama running locally — see <a href="#config-llm">LLM configuration</a>.</p>
+
+<!-- ── LLM Configuration ─────────────────────────────────────────────── -->
+<h2 id="config-llm">LLM configuration <a class="anchor" href="#config-llm">#</a></h2>
+<p>The AI assistant uses <a href="https://ollama.com">Ollama</a> as its default provider — a local model runner that keeps all data on your machine. No API key or internet connection is required.</p>
+
+<h3>Quick setup</h3>
+<pre><code># Install Ollama
+brew install ollama
+
+# Start the server (runs on http://localhost:11434)
+ollama serve
+
+# Pull a model (first time only)
+ollama pull llama3.2</code></pre>
+
+<h3>YAML configuration</h3>
+<p>Add an optional <code>llm:</code> block at the top level of your config to override defaults:</p>
+<pre><code>llm:
+  provider: ollama          # only supported provider today
+  model: llama3.2           # any model you have pulled
+  base_url: http://localhost:11434   # default; change for remote Ollama</code></pre>
+
+<table>
+  <thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>provider</code></td><td><code>ollama</code></td><td>LLM provider. Only <code>ollama</code> is supported today.</td></tr>
+    <tr><td><code>model</code></td><td><code>llama3.2</code></td><td>Model name as known to Ollama. Examples: <code>mistral</code>, <code>llama3</code>, <code>gemma2</code>.</td></tr>
+    <tr><td><code>base_url</code></td><td><code>http://localhost:11434</code></td><td>Ollama API base URL. Change this to point at a remote Ollama server.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <strong>Ollama not running</strong>
+  If Ollama is not running when you submit an AI query, mt shows: <em>"AI: ollama not reachable — start with: ollama serve"</em>. Start Ollama and press <code>/</code> again.
+</div>
+
+<h3>Microsoft Copilot</h3>
+<p>For Microsoft Office tasks, Copilot is available directly within Outlook, Word, and Excel if your Microsoft 365 subscription includes it. The built-in <em>Copilot Chat</em> target in the Microsoft Edge domain opens <code>copilot.microsoft.com</code>. The <em>Copilot in Word</em> and <em>Copilot in Excel</em> targets in their respective domains provide status notes reminding you to use Copilot from within the app.</p>
+<p>Programmatic Microsoft Copilot API integration (for use directly from the mt AI prompt) requires Azure credentials and is outside the scope of this tool's built-in LLM feature.</p>
+
 <!-- ── Default Workspaces ────────────────────────────────────────────── -->
 <h2 id="defaults">Default Workspaces <a class="anchor" href="#defaults">#</a></h2>
-<p>When no config file is found, mt shows five built-in domains:</p>
+<p>When no config file is found, mt shows eight built-in domains covering the Microsoft Office suite, developer tools, and infrastructure:</p>
 <table>
-  <thead><tr><th>Domain</th><th>Targets</th></tr></thead>
+  <thead><tr><th>Domain</th><th>Key targets</th></tr></thead>
   <tbody>
     <tr>
-      <td><strong>App Launch</strong></td>
-      <td>Microsoft Word, Microsoft Excel, Notes, Safari, Terminal</td>
+      <td><strong>Outlook</strong></td>
+      <td>Open Outlook, New Email, Open Inbox, Open Calendar, Open Tasks, New 30-Min Meeting, New 1-Hr Meeting, New Teams Meeting, Schedule with AI</td>
     </tr>
     <tr>
-      <td><strong>Dev Tools</strong></td>
-      <td>VS Code, iTerm2, Postman, TablePlus</td>
+      <td><strong>Word</strong></td>
+      <td>Open Word, New Document, Word Online, Copilot in Word</td>
+    </tr>
+    <tr>
+      <td><strong>Excel</strong></td>
+      <td>Open Excel, New Workbook, Excel Online, Copilot in Excel</td>
+    </tr>
+    <tr>
+      <td><strong>Microsoft Edge</strong></td>
+      <td>Open Edge, New Window, InPrivate Window, Copilot Chat, Microsoft 365, Outlook Web</td>
+    </tr>
+    <tr>
+      <td><strong>VS Code</strong></td>
+      <td>Open VS Code, Open Current Dir (<code>code .</code>), New Window, Open Settings, Open Extensions</td>
+    </tr>
+    <tr>
+      <td><strong>Terminal</strong></td>
+      <td>New Terminal Window, New iTerm2 Window, Open Windows App (Remote Desktop)</td>
     </tr>
     <tr>
       <td><strong>Infrastructure</strong></td>
       <td>Docker Up, Docker Down, Postgres (status), Redis (status)</td>
-    </tr>
-    <tr>
-      <td><strong>RunLayer</strong></td>
-      <td>Deploy, Status, Logs, Rollback (no commands — placeholder for your config)</td>
     </tr>
     <tr>
       <td><strong>Context/Git</strong></td>
@@ -588,7 +662,8 @@ domains:
     </tr>
   </tbody>
 </table>
-<p>These defaults are mostly macOS-oriented. Create a config file to replace them with commands appropriate for your system.</p>
+<p>The meeting targets (New 30-Min Meeting, New 1-Hr Meeting, New Teams Meeting) use AppleScript to create events in Outlook starting one hour from the current time. The <em>Schedule with AI</em> target is a reminder placeholder — press <code>/</code> and describe what you need instead of running it directly.</p>
+<p>These defaults are macOS-oriented. Create a config file to tailor them to your system and workflows.</p>
 
 <!-- ── Security Model ────────────────────────────────────────────────── -->
 <h2 id="security">Security Model <a class="anchor" href="#security">#</a></h2>

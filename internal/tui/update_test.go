@@ -1125,3 +1125,145 @@ func TestUpdate_Quit_ContextCancelled(t *testing.T) {
 		t.Error("expected context to be cancelled after pressing q")
 	}
 }
+
+// ── AI / LLM tests ────────────────────────────────────────────────────────────
+
+func TestParseLLMResponse_RunAction(t *testing.T) {
+	action, payload := parseLLMResponse("RUN:Git Status")
+	if action != "run" {
+		t.Errorf("expected action 'run', got %q", action)
+	}
+	if payload != "Git Status" {
+		t.Errorf("expected payload 'Git Status', got %q", payload)
+	}
+}
+
+func TestParseLLMResponse_CmdAction(t *testing.T) {
+	action, payload := parseLLMResponse(`CMD:["osascript","-e","tell app \"Finder\" to activate"]`)
+	if action != "cmd" {
+		t.Errorf("expected action 'cmd', got %q", action)
+	}
+	if !strings.HasPrefix(payload, `["osascript"`) {
+		t.Errorf("unexpected payload: %q", payload)
+	}
+}
+
+func TestParseLLMResponse_InfoFallback(t *testing.T) {
+	// Recognised INFO: prefix
+	action, payload := parseLLMResponse("INFO:Ollama is a local LLM runner.")
+	if action != "info" || payload != "Ollama is a local LLM runner." {
+		t.Errorf("unexpected result: %q %q", action, payload)
+	}
+	// Unrecognised format falls back to info
+	action2, payload2 := parseLLMResponse("Sorry, I cannot help with that.")
+	if action2 != "info" {
+		t.Errorf("expected info fallback, got %q", action2)
+	}
+	if payload2 != "Sorry, I cannot help with that." {
+		t.Errorf("unexpected payload: %q", payload2)
+	}
+}
+
+func TestBuildSystemPrompt_ListsTargets(t *testing.T) {
+	m := Model{
+		domains: []Domain{
+			{Name: "Outlook", Targets: []Target{
+				{Name: "New Email", Status: "Opens a new email"},
+				{Name: "Open Calendar", Status: "Opens calendar"},
+			}},
+		},
+	}
+	prompt := m.buildSystemPrompt()
+	if !strings.Contains(prompt, "New Email") {
+		t.Error("expected system prompt to contain target 'New Email'")
+	}
+	if !strings.Contains(prompt, "Open Calendar") {
+		t.Error("expected system prompt to contain target 'Open Calendar'")
+	}
+	if !strings.Contains(prompt, "RUN:") {
+		t.Error("expected system prompt to contain RUN: instruction")
+	}
+	if !strings.Contains(prompt, "CMD:") {
+		t.Error("expected system prompt to contain CMD: instruction")
+	}
+}
+
+func TestUpdate_SlashKey_EntersInputMode(t *testing.T) {
+	m := testModel()
+	next := press(m, key('/'))
+	if !next.inputMode {
+		t.Error("expected inputMode=true after pressing /")
+	}
+	if next.inputBuf != "" {
+		t.Errorf("expected empty inputBuf, got %q", next.inputBuf)
+	}
+}
+
+func TestUpdate_InputMode_EscClearsMode(t *testing.T) {
+	m := testModel()
+	m.inputMode = true
+	m.inputBuf = "hello"
+	next := press(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if next.inputMode {
+		t.Error("expected inputMode=false after Esc")
+	}
+	if next.inputBuf != "" {
+		t.Errorf("expected empty inputBuf after Esc, got %q", next.inputBuf)
+	}
+}
+
+func TestUpdate_InputMode_TypesCharacters(t *testing.T) {
+	m := testModel()
+	m.inputMode = true
+	m = press(m, key('h'))
+	m = press(m, key('i'))
+	if m.inputBuf != "hi" {
+		t.Errorf("expected inputBuf 'hi', got %q", m.inputBuf)
+	}
+}
+
+func TestUpdate_InputMode_BackspaceRemovesChar(t *testing.T) {
+	m := testModel()
+	m.inputMode = true
+	m.inputBuf = "hello"
+	next := press(m, tea.KeyMsg{Type: tea.KeyBackspace})
+	if next.inputBuf != "hell" {
+		t.Errorf("expected 'hell', got %q", next.inputBuf)
+	}
+}
+
+func TestUpdate_LLMResponse_InfoSetsOutput(t *testing.T) {
+	m := testModel()
+	m.llmPending = true
+	next := send(m, llmResponseMsg{response: "INFO:This is the answer."})
+	if next.llmPending {
+		t.Error("expected llmPending=false after response")
+	}
+	if next.output != "This is the answer." {
+		t.Errorf("expected output 'This is the answer.', got %q", next.output)
+	}
+}
+
+func TestUpdate_LLMResponse_ErrorShowsInCmdErr(t *testing.T) {
+	m := testModel()
+	m.llmPending = true
+	next := send(m, llmResponseMsg{err: errors.New("ollama not reachable")})
+	if next.llmPending {
+		t.Error("expected llmPending=false after error response")
+	}
+	if !strings.Contains(next.cmdErr, "ollama not reachable") {
+		t.Errorf("expected cmdErr to contain error, got %q", next.cmdErr)
+	}
+}
+
+func TestUpdate_LLMResponse_CancelledIgnored(t *testing.T) {
+	m := testModel()
+	m.llmPending = true
+	next := send(m, llmResponseMsg{err: context.Canceled})
+	if next.llmPending {
+		t.Error("expected llmPending=false after cancellation")
+	}
+	if next.cmdErr != "" {
+		t.Errorf("expected no cmdErr for cancelled request, got %q", next.cmdErr)
+	}
+}

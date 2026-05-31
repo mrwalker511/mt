@@ -5,6 +5,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/mrwalker511/mt/internal/llm"
 )
 
 // maxCachedOutputBytes caps the size of a single entry stored in targetOutputs.
@@ -31,6 +33,12 @@ type parallelCmdResultMsg struct {
 	label  string // display name for combined output header
 	output string
 	err    error
+}
+
+// llmResponseMsg carries the result of an async LLM query back to Update.
+type llmResponseMsg struct {
+	response string
+	err      error
 }
 
 // clipboardMsg reports the outcome of a copy-to-clipboard operation.
@@ -106,6 +114,13 @@ type Model struct {
 	// ctx is cancelled when the user quits, terminating all in-flight commands.
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// AI natural-language input (/ key)
+	llmConfig  llm.Config
+	inputMode  bool               // true while the / input overlay is active
+	inputBuf   string             // characters typed so far
+	llmPending bool               // LLM request in-flight
+	llmCancel  context.CancelFunc // cancels the in-flight LLM request
 }
 
 // hasGitDomain reports whether the active workspace has a Context/Git domain.
@@ -186,7 +201,7 @@ func (m Model) restoreTargetOutput() Model {
 // New returns a freshly initialized Model. Workspaces are loaded from the user's
 // config file if one exists; otherwise the built-in defaults are used.
 func New() Model {
-	workspaces, err := LoadWorkspaces()
+	workspaces, llmCfg, err := LoadWorkspaces()
 	var domains []Domain
 	if len(workspaces) > 0 {
 		domains = workspaces[0].Domains
@@ -204,6 +219,7 @@ func New() Model {
 		parallelOutputs: make(map[string]string),
 		ctx:             ctx,
 		cancel:          cancel,
+		llmConfig:       llmCfg,
 	}
 	if err != nil {
 		m.cmdErr = "Config error — using built-in defaults."

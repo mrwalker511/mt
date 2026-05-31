@@ -30,6 +30,23 @@
 #   sequence   — ordered list of target names to run in series (stops on failure)
 #   host       — SSH host ([user@]hostname); cmd is run as: ssh host <cmd>
 #   include    — (top-level) list of YAML files to merge; must be within $HOME
+#
+# ─── AI / LLM ─────────────────────────────────────────────────────────────────
+# Press [/] in mt to open the AI prompt bar. Type a natural-language request and
+# press Enter. The local LLM will route it to an existing target, generate a new
+# command (e.g. an osascript to create a meeting), or answer your question.
+#
+# Requires Ollama running locally (https://ollama.com):
+#   brew install ollama
+#   ollama serve          # start the server
+#   ollama pull llama3.2  # download default model
+#
+# Optional: configure the provider, model, and base URL:
+#
+# llm:
+#   provider: ollama          # only supported provider today
+#   model: llama3.2           # any model you have pulled via `ollama pull`
+#   base_url: http://localhost:11434
 
 # ── Example: multi-workspace config with per-app actions ──────────────────────
 

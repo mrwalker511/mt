@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +16,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/mrwalker511/mt/internal/llm"
 )
 
 // maxOutputBytes caps the output retained from any single command execution.
@@ -157,7 +161,77 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case llmResponseMsg:
+		if m.llmCancel != nil {
+			m.llmCancel()
+			m.llmCancel = nil
+		}
+		m.llmPending = false
+		if msg.err != nil {
+			if !errors.Is(msg.err, context.Canceled) {
+				m.cmdErr = "AI: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		action, payload := parseLLMResponse(msg.response)
+		switch action {
+		case "run":
+			name := strings.TrimSpace(payload)
+			for _, d := range m.domains {
+				for _, t := range d.Targets {
+					if strings.EqualFold(t.Name, name) {
+						ec := effectiveCmd(t)
+						if len(ec) == 0 {
+							m.cmdErr = "AI: target " + t.Name + " has no command."
+							return m, nil
+						}
+						m.running, m.output, m.cmdErr = true, "", ""
+						m.pendingTarget = m.runKey(d.Name, t.Name)
+						return m, runCmd(m.ctx, ec, t.LaunchMsg)
+					}
+				}
+			}
+			m.cmdErr = "AI: target not found: " + name
+		case "cmd":
+			var cmdSlice []string
+			if jsonErr := json.Unmarshal([]byte(payload), &cmdSlice); jsonErr != nil || len(cmdSlice) == 0 {
+				m.cmdErr = "AI: malformed command from LLM"
+				return m, nil
+			}
+			m.running, m.output, m.cmdErr = true, "", ""
+			return m, runCmd(m.ctx, cmdSlice, "")
+		case "info":
+			m.output = payload
+		}
+		return m, nil
+
 	case tea.KeyMsg:
+		// Input mode: capture all keystrokes for the AI prompt bar.
+		if m.inputMode {
+			switch msg.String() {
+			case "esc":
+				m.inputMode, m.inputBuf = false, ""
+			case "enter":
+				if m.inputBuf != "" {
+					query := m.inputBuf
+					m.inputMode, m.inputBuf = false, ""
+					m.llmPending = true
+					llmCtx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+					m.llmCancel = cancel
+					return m, runLLMQuery(llmCtx, m.llmConfig, m.buildSystemPrompt(), query)
+				}
+			case "backspace", "ctrl+h":
+				if r := []rune(m.inputBuf); len(r) > 0 {
+					m.inputBuf = string(r[:len(r)-1])
+				}
+			default:
+				if msg.Type == tea.KeyRunes {
+					m.inputBuf += string(msg.Runes)
+				}
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			if m.cancel != nil {
@@ -184,6 +258,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, saveOutputToFile(m.output)
 			}
 
+		case "/":
+			if !m.running && !m.llmPending {
+				m.inputMode, m.inputBuf = true, ""
+			}
+
+		case "esc":
+			if m.llmPending {
+				if m.llmCancel != nil {
+					m.llmCancel()
+					m.llmCancel = nil
+				}
+				m.llmPending = false
+				m.cmdErr = "AI query cancelled."
+			}
+
 		case " ":
 			if m.activePane == paneMiddle {
 				if m.domainCursor < len(m.domains) {
@@ -201,8 +290,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "R":
-			workspaces, err := LoadWorkspaces()
+			workspaces, llmCfg, err := LoadWorkspaces()
 			m.allWorkspaces = workspaces
+			m.llmConfig = llmCfg
 			m.workspaceIdx = 0
 			if len(workspaces) > 0 {
 				m.domains = workspaces[0].Domains
@@ -552,6 +642,57 @@ func copyToClipboard(text string) tea.Cmd {
 		}
 		cmd.Stdin = strings.NewReader(text)
 		return clipboardMsg{err: cmd.Run()}
+	}
+}
+
+// buildSystemPrompt constructs the LLM system prompt listing all available targets
+// and the structured response format the LLM must follow.
+func (m Model) buildSystemPrompt() string {
+	var sb strings.Builder
+	sb.WriteString("You are an AI assistant embedded in mt, a macOS terminal workspace launcher.\n")
+	sb.WriteString("Map the user's request to exactly one response.\n\n")
+	sb.WriteString("Available targets:\n")
+	for _, d := range m.domains {
+		for _, t := range d.Targets {
+			line := "- " + t.Name
+			if t.Status != "" {
+				first := strings.SplitN(t.Status, "\n", 2)[0]
+				if first != "" {
+					line += ": " + first
+				}
+			}
+			sb.WriteString(line + "\n")
+		}
+	}
+	sb.WriteString("\nRespond with EXACTLY ONE of (nothing else):\n")
+	sb.WriteString("RUN:<target_name>   — run an existing target by its exact name\n")
+	sb.WriteString("CMD:<json_array>    — run a new command as a JSON array, e.g. CMD:[\"osascript\",\"-e\",\"...\"]\n")
+	sb.WriteString("INFO:<text>         — answer a question in ≤2 sentences\n\n")
+	sb.WriteString("For Outlook meetings use CMD with osascript. Outlook AppleScript properties: subject, start time, end time, location.\n")
+	sb.WriteString("To add an attendee: make new attendee at end of attendees of newEvent with properties {email address:{address:\"EMAIL\"}}\n")
+	sb.WriteString("Current time: " + time.Now().Format("Monday, January 2 2006 15:04") + "\n")
+	return sb.String()
+}
+
+// parseLLMResponse parses a structured LLM response into an action and payload.
+// Recognised prefixes: RUN:, CMD:, INFO:. Falls back to "info" for unrecognised format.
+func parseLLMResponse(response string) (action, payload string) {
+	response = strings.TrimSpace(response)
+	for _, prefix := range []string{"RUN:", "CMD:", "INFO:"} {
+		if strings.HasPrefix(response, prefix) {
+			key := strings.ToLower(strings.TrimSuffix(prefix, ":"))
+			return key, strings.TrimSpace(response[len(prefix):])
+		}
+	}
+	return "info", response
+}
+
+// runLLMQuery sends the user query to the configured LLM and returns the response as a msg.
+func runLLMQuery(ctx context.Context, cfg llm.Config, systemPrompt, query string) tea.Cmd {
+	return func() tea.Msg {
+		fullPrompt := systemPrompt + "\nUser: " + query + "\nResponse:"
+		resp, err := llm.Generate(ctx, cfg, fullPrompt)
+		return llmResponseMsg{response: resp, err: err}
 	}
 }
 
