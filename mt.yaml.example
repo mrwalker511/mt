@@ -44,9 +44,17 @@
 # Optional: configure the provider, model, and base URL:
 #
 # llm:
-#   provider: ollama          # only supported provider today
+#   provider: ollama          # "ollama" (default) or "openai"
 #   model: llama3.2           # any model you have pulled via `ollama pull`
 #   base_url: http://localhost:11434
+#
+# OpenAI / OpenAI-compatible (LMStudio, vLLM, Ollama /v1/, etc.):
+#
+# llm:
+#   provider: openai
+#   model: gpt-4o-mini        # or gpt-4o, o1-mini, etc.
+#   base_url: https://api.openai.com   # override for local OpenAI-compatible servers
+#   api_key: sk-...           # or leave blank and set OPENAI_API_KEY env var
 
 # ── Example: multi-workspace config with per-app actions ──────────────────────
 

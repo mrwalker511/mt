@@ -17,9 +17,10 @@ const DefaultModel = "llama3.2"
 
 // Config holds the LLM provider settings, parsed from the top-level llm: YAML key.
 type Config struct {
-	Provider string `yaml:"provider"` // only "ollama" is supported today
-	Model    string `yaml:"model"`    // e.g. "llama3.2", "mistral", "llama3"
-	BaseURL  string `yaml:"base_url"` // default: http://localhost:11434
+	Provider string `yaml:"provider"` // "ollama" (default) | "openai"
+	Model    string `yaml:"model"`    // e.g. "llama3.2", "gpt-4o-mini"
+	BaseURL  string `yaml:"base_url"` // default depends on provider
+	APIKey   string `yaml:"api_key"`  // OpenAI key; falls back to OPENAI_API_KEY env var
 }
 
 type generateRequest struct {
@@ -34,9 +35,18 @@ type generateResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// Generate sends prompt to Ollama (non-streaming) and returns the full response text.
-// Returns a human-readable error if Ollama is not reachable so the TUI can display it.
+// Generate dispatches to the configured provider and returns the full response text.
+// Returns a human-readable error the TUI can display directly.
 func Generate(ctx context.Context, cfg Config, prompt string) (string, error) {
+	switch cfg.Provider {
+	case "openai":
+		return generateOpenAI(ctx, cfg, prompt)
+	default: // "ollama" or ""
+		return generateOllama(ctx, cfg, prompt)
+	}
+}
+
+func generateOllama(ctx context.Context, cfg Config, prompt string) (string, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
