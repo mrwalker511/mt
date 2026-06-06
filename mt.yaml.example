@@ -33,28 +33,28 @@
 #
 # ─── AI / LLM ─────────────────────────────────────────────────────────────────
 # Press [/] in mt to open the AI prompt bar. Type a natural-language request and
-# press Enter. The local LLM will route it to an existing target, generate a new
+# press Enter. The LLM will route it to an existing target, generate a new
 # command (e.g. an osascript to create a meeting), or answer your question.
 #
-# Requires Ollama running locally (https://ollama.com):
-#   brew install ollama
-#   ollama serve          # start the server
-#   ollama pull llama3.2  # download default model
+# LiteLLM proxy (default, port 4000):
+#   pip install litellm
+#   litellm --model ollama/llama3.1:8b   # or any LiteLLM-supported model
 #
-# Optional: configure the provider, model, and base URL:
+# llama.cpp server (port 8080):
+#   ./llama-server -m model.gguf --port 8080
 #
 # llm:
-#   provider: ollama          # "ollama" (default) or "openai"
-#   model: llama3.2           # any model you have pulled via `ollama pull`
-#   base_url: http://localhost:11434
+#   provider: litellm            # "litellm" (default) | "llamacpp" | "openai"
+#   model: llama3.1:8b           # model name as understood by the provider
+#   base_url: http://localhost:4000   # override provider's default endpoint
 #
-# OpenAI / OpenAI-compatible (LMStudio, vLLM, Ollama /v1/, etc.):
+# OpenAI or any OpenAI-compatible cloud provider:
 #
 # llm:
 #   provider: openai
-#   model: gpt-4o-mini        # or gpt-4o, o1-mini, etc.
-#   base_url: https://api.openai.com   # override for local OpenAI-compatible servers
-#   api_key: sk-...           # or leave blank and set OPENAI_API_KEY env var
+#   model: gpt-4o-mini           # or gpt-4o, o1-mini, etc.
+#   base_url: https://api.openai.com   # override for vLLM, LMStudio, etc.
+#   api_key: sk-...              # or set OPENAI_API_KEY env var
 
 # ── Example: multi-workspace config with per-app actions ──────────────────────
 
