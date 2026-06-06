@@ -585,37 +585,39 @@ domains:
 
 <!-- ── LLM Configuration ─────────────────────────────────────────────── -->
 <h2 id="config-llm">LLM configuration <a class="anchor" href="#config-llm">#</a></h2>
-<p>The AI assistant uses <a href="https://ollama.com">Ollama</a> as its default provider — a local model runner that keeps all data on your machine. No API key or internet connection is required.</p>
+<p>The AI assistant supports two providers: <strong>Ollama</strong> (local, default) and <strong>OpenAI</strong> (cloud or any OpenAI-compatible server). Switch between them with a single <code>provider:</code> line in your config.</p>
 
-<h3>Quick setup</h3>
-<pre><code># Install Ollama
+<h3>Ollama (default — local, no API key)</h3>
+<pre><code># Install and start Ollama
 brew install ollama
-
-# Start the server (runs on http://localhost:11434)
 ollama serve
 
-# Pull a model (first time only)
-ollama pull llama3.2</code></pre>
+# Pull a model (first time only — llama3.1:8b recommended for best quality)
+ollama pull llama3.1:8b</code></pre>
 
-<h3>YAML configuration</h3>
-<p>Add an optional <code>llm:</code> block at the top level of your config to override defaults:</p>
+<h3>OpenAI / OpenAI-compatible</h3>
 <pre><code>llm:
-  provider: ollama          # only supported provider today
-  model: llama3.2           # any model you have pulled
-  base_url: http://localhost:11434   # default; change for remote Ollama</code></pre>
+  provider: openai
+  model: gpt-4o-mini        # or gpt-4o, o1-mini, etc.
+  base_url: https://api.openai.com   # override for local servers
+  api_key: sk-...           # or leave blank and set OPENAI_API_KEY env var</code></pre>
 
+<p>Any OpenAI-compatible server works by setting <code>base_url</code>: LMStudio, vLLM, Ollama's own <code>/v1/</code> endpoint, and others.</p>
+
+<h3>YAML field reference</h3>
 <table>
   <thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>provider</code></td><td><code>ollama</code></td><td>LLM provider. Only <code>ollama</code> is supported today.</td></tr>
-    <tr><td><code>model</code></td><td><code>llama3.2</code></td><td>Model name as known to Ollama. Examples: <code>mistral</code>, <code>llama3</code>, <code>gemma2</code>.</td></tr>
-    <tr><td><code>base_url</code></td><td><code>http://localhost:11434</code></td><td>Ollama API base URL. Change this to point at a remote Ollama server.</td></tr>
+    <tr><td><code>provider</code></td><td><code>ollama</code></td><td><code>ollama</code> or <code>openai</code>.</td></tr>
+    <tr><td><code>model</code></td><td><code>llama3.2</code> / <code>gpt-4o-mini</code></td><td>Model name for the chosen provider.</td></tr>
+    <tr><td><code>base_url</code></td><td>Provider default</td><td>API base URL. Override for remote or local-compatible servers.</td></tr>
+    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>OpenAI API key. If omitted, read from the <code>OPENAI_API_KEY</code> environment variable.</td></tr>
   </tbody>
 </table>
 
 <div class="callout warn">
-  <strong>Ollama not running</strong>
-  If Ollama is not running when you submit an AI query, mt shows: <em>"AI: ollama not reachable — start with: ollama serve"</em>. Start Ollama and press <code>/</code> again.
+  <strong>Provider not reachable</strong>
+  If Ollama is not running: <em>"ollama not reachable — start with: ollama serve"</em>. If the OpenAI key is missing: <em>"openai: no API key — set api_key in config or OPENAI_API_KEY env var"</em>.
 </div>
 
 <h3>Microsoft Copilot</h3>
