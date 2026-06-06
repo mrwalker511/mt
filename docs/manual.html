@@ -581,43 +581,49 @@ domains:
   <li><code>what does git stash do</code> → returns a short explanation</li>
   <li><code>start docker and check postgres</code> → runs <em>Docker Up</em> then <em>Postgres</em> if they exist as targets</li>
 </ul>
-<p>Press <code>Esc</code> to cancel the input or cancel an in-flight request. Requires Ollama running locally — see <a href="#config-llm">LLM configuration</a>.</p>
+<p>Press <code>Esc</code> to cancel the input or cancel an in-flight request. Requires a local LLM server — see <a href="#config-llm">LLM configuration</a>.</p>
 
 <!-- ── LLM Configuration ─────────────────────────────────────────────── -->
 <h2 id="config-llm">LLM configuration <a class="anchor" href="#config-llm">#</a></h2>
-<p>The AI assistant supports two providers: <strong>Ollama</strong> (local, default) and <strong>OpenAI</strong> (cloud or any OpenAI-compatible server). Switch between them with a single <code>provider:</code> line in your config.</p>
+<p>The AI assistant supports three providers: <strong>LiteLLM</strong> (local proxy, default), <strong>llama.cpp</strong> (direct server), and <strong>OpenAI</strong> (cloud). All three speak the OpenAI <code>/v1/chat/completions</code> API. Switch with a single <code>provider:</code> line.</p>
 
-<h3>Ollama (default — local, no API key)</h3>
-<pre><code># Install and start Ollama
-brew install ollama
-ollama serve
+<h3>LiteLLM proxy (default — port 4000)</h3>
+<p>LiteLLM acts as a unified gateway in front of any model backend (Ollama, vLLM, cloud APIs, etc.).</p>
+<pre><code>pip install litellm
 
-# Pull a model (first time only — llama3.1:8b recommended for best quality)
-ollama pull llama3.1:8b</code></pre>
+# Start the proxy with any backend model
+litellm --model ollama/llama3.1:8b
+# or
+litellm --model gpt-4o-mini   # requires OPENAI_API_KEY in env</code></pre>
 
-<h3>OpenAI / OpenAI-compatible</h3>
+<h3>llama.cpp server (port 8080)</h3>
+<pre><code># Build or download a llama.cpp release, then:
+./llama-server -m /path/to/model.gguf --port 8080</code></pre>
+<pre><code>llm:
+  provider: llamacpp
+  base_url: http://localhost:8080   # default; omit if using the default port</code></pre>
+
+<h3>OpenAI / OpenAI-compatible cloud</h3>
 <pre><code>llm:
   provider: openai
   model: gpt-4o-mini        # or gpt-4o, o1-mini, etc.
-  base_url: https://api.openai.com   # override for local servers
-  api_key: sk-...           # or leave blank and set OPENAI_API_KEY env var</code></pre>
-
-<p>Any OpenAI-compatible server works by setting <code>base_url</code>: LMStudio, vLLM, Ollama's own <code>/v1/</code> endpoint, and others.</p>
+  base_url: https://api.openai.com   # override for vLLM, LMStudio, etc.
+  api_key: sk-...           # or set OPENAI_API_KEY env var</code></pre>
 
 <h3>YAML field reference</h3>
 <table>
   <thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>provider</code></td><td><code>ollama</code></td><td><code>ollama</code> or <code>openai</code>.</td></tr>
-    <tr><td><code>model</code></td><td><code>llama3.2</code> / <code>gpt-4o-mini</code></td><td>Model name for the chosen provider.</td></tr>
-    <tr><td><code>base_url</code></td><td>Provider default</td><td>API base URL. Override for remote or local-compatible servers.</td></tr>
-    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>OpenAI API key. If omitted, read from the <code>OPENAI_API_KEY</code> environment variable.</td></tr>
+    <tr><td><code>provider</code></td><td><code>litellm</code></td><td><code>litellm</code>, <code>llamacpp</code>, or <code>openai</code>.</td></tr>
+    <tr><td><code>model</code></td><td><em>provider-specific</em></td><td>Model name passed to the provider. LiteLLM uses its own routing (e.g. <code>ollama/llama3.1:8b</code>); llama.cpp ignores it.</td></tr>
+    <tr><td><code>base_url</code></td><td><code>http://localhost:4000</code> / <code>:8080</code> / openai.com</td><td>API base URL. Override to point at any OpenAI-compatible server.</td></tr>
+    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>Required for <code>openai</code> provider only. Ignored by LiteLLM and llama.cpp.</td></tr>
   </tbody>
 </table>
 
 <div class="callout warn">
-  <strong>Provider not reachable</strong>
-  If Ollama is not running: <em>"ollama not reachable — start with: ollama serve"</em>. If the OpenAI key is missing: <em>"openai: no API key — set api_key in config or OPENAI_API_KEY env var"</em>.
+  <strong>Server not reachable</strong>
+  <em>"litellm: not reachable at http://localhost:4000"</em> — start the LiteLLM proxy first. <em>"llamacpp: not reachable at http://localhost:8080"</em> — start <code>llama-server</code> first. <em>"openai: no API key"</em> — set <code>api_key</code> in config or <code>OPENAI_API_KEY</code> env var.
 </div>
 
 <h3>Microsoft Copilot</h3>
