@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -15,7 +18,14 @@ const (
 	DefaultOpenAIModel     = "gpt-4o-mini"
 	DefaultLiteLLMBaseURL  = "http://localhost:4000"
 	DefaultLlamaCppBaseURL = "http://localhost:8080"
+
+	maxResponseBytes = 1 << 20 // 1 MB — ample for any chat completion
 )
+
+// llmHTTPClient caps stalled TCP handshakes that context cancellation cannot reach.
+// 35s > the 30s context timeout used at call sites, so the context fires first
+// under normal conditions but OS-level hangs are bounded.
+var llmHTTPClient = &http.Client{Timeout: 35 * time.Second}
 
 type openAIMessage struct {
 	Role    string `json:"role"`
@@ -44,6 +54,10 @@ type openAIError struct {
 // generateOpenAICompat posts to any OpenAI-compatible /v1/chat/completions endpoint.
 // apiKey is sent as a Bearer token only when non-empty.
 func generateOpenAICompat(ctx context.Context, baseURL, model, apiKey, prompt string) (string, error) {
+	if _, err := url.ParseRequestURI(baseURL); err != nil {
+		return "", fmt.Errorf("invalid base_url %q: %w", baseURL, err)
+	}
+
 	body, err := json.Marshal(openAIRequest{
 		Model:    model,
 		Messages: []openAIMessage{{Role: "user", Content: prompt}},
@@ -62,14 +76,19 @@ func generateOpenAICompat(ctx context.Context, baseURL, model, apiKey, prompt st
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("not reachable at %s — is the server running? (%w)", baseURL, err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(errBody)))
+	}
+
 	var result openAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&result); err != nil {
 		return "", fmt.Errorf("decoding response: %w", err)
 	}
 	if result.Error != nil {
