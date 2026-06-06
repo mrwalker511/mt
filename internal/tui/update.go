@@ -291,21 +291,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "R":
 			workspaces, llmCfg, err := LoadWorkspaces()
-			m.allWorkspaces = workspaces
-			m.llmConfig = llmCfg
-			m.workspaceIdx = 0
-			if len(workspaces) > 0 {
-				m.domains = workspaces[0].Domains
-			} else {
-				m.domains = nil
-			}
-			m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
-			m.targetOutputs = make(map[string]outputRecord)
-			m.selectedTargets = make(map[string]bool)
-			m.showHelp = false
 			if err != nil {
 				m.output, m.cmdErr = "", "Config reload error: "+err.Error()
 			} else {
+				m.allWorkspaces = workspaces
+				m.llmConfig = llmCfg
+				m.workspaceIdx = 0
+				if len(workspaces) > 0 {
+					m.domains = workspaces[0].Domains
+				} else {
+					m.domains = nil
+				}
+				m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
+				m.targetOutputs = make(map[string]outputRecord)
+				m.selectedTargets = make(map[string]bool)
+				m.showHelp = false
 				m.output = fmt.Sprintf("Config reloaded — %d workspace(s) loaded.", len(workspaces))
 				m.cmdErr = ""
 			}

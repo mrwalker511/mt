@@ -116,7 +116,10 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 		return fileConfig{}, fmt.Errorf("parsing %s: %w", absPath, err)
 	}
 
-	home, _ := os.UserHomeDir()
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		return fileConfig{}, fmt.Errorf("cannot determine home directory: %w", homeErr)
+	}
 	dir := filepath.Dir(absPath)
 	for _, inc := range cfg.Include {
 		if !filepath.IsAbs(inc) {
@@ -126,7 +129,7 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 		if real, err := filepath.EvalSymlinks(inc); err == nil {
 			inc = real
 		}
-		if home != "" && !strings.HasPrefix(inc, home+string(filepath.Separator)) {
+		if !strings.HasPrefix(inc, home+string(filepath.Separator)) {
 			return cfg, fmt.Errorf("include %s: path must be within home directory (%s)", inc, home)
 		}
 		incCfg, err := resolveConfig(inc, visited)

@@ -9,6 +9,52 @@ import (
 	"testing"
 )
 
+func TestGenerateOpenAI_HTTP500_ReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal Server Error"))
+	}))
+	defer srv.Close()
+
+	cfg := Config{Provider: "openai", BaseURL: srv.URL, APIKey: "test-key"}
+	_, err := Generate(context.Background(), cfg, "hello")
+	if err == nil {
+		t.Fatal("expected error for HTTP 500")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("expected status code in error, got: %v", err)
+	}
+}
+
+func TestGenerateOpenAI_LargeBody_NotOOM(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Write 2 MB of valid-ish JSON prefix to test the size cap.
+		// The decoder will fail or truncate — either way no OOM.
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"`))
+		for i := 0; i < 2*1024*1024; i++ {
+			w.Write([]byte("x"))
+		}
+		// intentionally no closing — the LimitReader cuts it off cleanly
+	}))
+	defer srv.Close()
+
+	cfg := Config{Provider: "litellm", BaseURL: srv.URL}
+	// expect either a decode error (truncated JSON) or a valid response — not a hang or OOM
+	_, _ = Generate(context.Background(), cfg, "hello")
+}
+
+func TestGenerateOpenAI_BadBaseURL_ReturnsError(t *testing.T) {
+	cfg := Config{Provider: "litellm", BaseURL: "not a valid url"}
+	_, err := Generate(context.Background(), cfg, "hello")
+	if err == nil {
+		t.Fatal("expected error for invalid base_url")
+	}
+	if !strings.Contains(err.Error(), "invalid base_url") {
+		t.Errorf("expected invalid base_url in error, got: %v", err)
+	}
+}
+
 func TestGenerateOpenAI_MissingKey_ReturnsError(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	cfg := Config{Provider: "openai", Model: "gpt-4o-mini"}
