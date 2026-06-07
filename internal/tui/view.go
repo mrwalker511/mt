@@ -54,6 +54,8 @@ func (m Model) View() string {
 		hint = "AI › " + m.inputBuf + "█   [Esc] cancel"
 	case m.llmPending:
 		hint = "AI › thinking…   [Esc] cancel"
+	case m.confirmCmd != nil:
+		hint = "AI › run: " + strings.Join(m.confirmCmd, " ") + "   [Enter] confirm · [Esc] cancel"
 	default:
 		hint = "[↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [/] AI  [y] Copy  [S] Save  [c] Clear  [?] Help  [R] Reload  [q] Quit"
 		if len(m.allWorkspaces) > 1 {
@@ -100,6 +102,8 @@ func (m Model) renderRightPane(w, h int) string {
 
 	var text string
 	switch {
+	case m.confirmCmd != nil:
+		text = normalItemStyle.Render("AI wants to run:\n\n  " + strings.Join(m.confirmCmd, " ") + "\n\n[Enter] confirm  ·  [Esc] cancel")
 	case m.running:
 		text = dimItemStyle.Render("Running…")
 	case m.cmdErr != "" && m.output != "":

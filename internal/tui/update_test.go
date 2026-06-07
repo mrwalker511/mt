@@ -1267,3 +1267,57 @@ func TestUpdate_LLMResponse_CancelledIgnored(t *testing.T) {
 		t.Errorf("expected no cmdErr for cancelled request, got %q", next.cmdErr)
 	}
 }
+
+func TestUpdate_LLMCmd_SetsConfirmCmd(t *testing.T) {
+	m := testModel()
+	m.llmPending = true
+	next := send(m, llmResponseMsg{response: `CMD:["open","-a","Outlook"]`})
+	if next.running {
+		t.Error("command should not run before confirmation")
+	}
+	if len(next.confirmCmd) != 3 || next.confirmCmd[0] != "open" {
+		t.Errorf("expected confirmCmd=[open -a Outlook], got %v", next.confirmCmd)
+	}
+}
+
+func TestUpdate_ConfirmCmd_Enter_RunsCmd(t *testing.T) {
+	m := testModel()
+	m.confirmCmd = []string{"open", "-a", "Outlook"}
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	nm := next.(Model)
+	if nm.confirmCmd != nil {
+		t.Error("confirmCmd should be cleared after Enter")
+	}
+	if !nm.running {
+		t.Error("expected running=true after confirming")
+	}
+	if cmd == nil {
+		t.Error("expected a tea.Cmd to be returned")
+	}
+}
+
+func TestUpdate_ConfirmCmd_Esc_Cancels(t *testing.T) {
+	m := testModel()
+	m.confirmCmd = []string{"rm", "-rf", "/"}
+	next := press(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if next.confirmCmd != nil {
+		t.Error("confirmCmd should be cleared after Esc")
+	}
+	if next.running {
+		t.Error("command should not run after Esc")
+	}
+	if !strings.Contains(next.cmdErr, "cancelled") {
+		t.Errorf("expected cancellation message in cmdErr, got %q", next.cmdErr)
+	}
+}
+
+func TestUpdate_InputBuf_CapAt500(t *testing.T) {
+	m := testModel()
+	m.inputMode = true
+	for i := 0; i < 501; i++ {
+		m = press(m, key('a'))
+	}
+	if got := len([]rune(m.inputBuf)); got != 500 {
+		t.Errorf("expected inputBuf capped at 500 runes, got %d", got)
+	}
+}

@@ -198,8 +198,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cmdErr = "AI: malformed command from LLM"
 				return m, nil
 			}
-			m.running, m.output, m.cmdErr = true, "", ""
-			return m, runCmd(m.ctx, cmdSlice, "")
+			m.confirmCmd = cmdSlice // await user confirmation before running
+			return m, nil
 		case "info":
 			m.output = payload
 		}
@@ -225,9 +225,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.inputBuf = string(r[:len(r)-1])
 				}
 			default:
-				if msg.Type == tea.KeyRunes {
+				if msg.Type == tea.KeyRunes && len([]rune(m.inputBuf)) < 500 {
 					m.inputBuf += string(msg.Runes)
 				}
+			}
+			return m, nil
+		}
+
+		// Confirm overlay: AI-generated CMD awaiting user approval.
+		if m.confirmCmd != nil {
+			switch msg.String() {
+			case "enter":
+				cmd := m.confirmCmd
+				m.confirmCmd = nil
+				m.running, m.output, m.cmdErr = true, "", ""
+				return m, runCmd(m.ctx, cmd, "")
+			case "esc":
+				m.confirmCmd = nil
+				m.cmdErr = "AI command cancelled."
+			case "q", "ctrl+c":
+				if m.cancel != nil {
+					m.cancel()
+				}
+				m.quitting = true
+				return m, tea.Quit
 			}
 			return m, nil
 		}
