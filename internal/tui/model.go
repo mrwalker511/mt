@@ -121,6 +121,7 @@ type Model struct {
 	inputBuf   string             // characters typed so far
 	llmPending bool               // LLM request in-flight
 	llmCancel  context.CancelFunc // cancels the in-flight LLM request
+	confirmCmd []string           // non-nil when an AI-generated CMD awaits confirmation
 }
 
 // hasGitDomain reports whether the active workspace has a Context/Git domain.
