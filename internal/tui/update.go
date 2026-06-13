@@ -84,7 +84,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Sequence in progress and step succeeded: advance to next step.
 		if msg.err == nil && len(m.seqQueue) > 0 {
-			m.seqOutput += output + "\n"
+			if len(m.seqOutput)+len(output)+1 <= maxOutputBytes {
+				m.seqOutput += output + "\n"
+			} else {
+				m.seqOutput += "…(sequence output truncated)\n"
+			}
 			next := m.seqQueue[0]
 			m.seqQueue = m.seqQueue[1:]
 			execCmd := effectiveCmd(next)
@@ -124,6 +128,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			out += "\n[ERROR: " + msg.err.Error() + "]"
 		} else {
 			m.runStates[msg.key] = runSuccess
+		}
+		if len(out) > maxOutputBytes {
+			out = out[:maxOutputBytes] + "\n…(output truncated)"
 		}
 		m.parallelOutputs[msg.label] = out
 		m.multiRunPending--
@@ -478,9 +485,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.showHelp = false
 				}
 			case paneRight:
-				lines := strings.Split(m.output, "\n")
+				lineCount := strings.Count(m.output, "\n") + 1
 				pageSize := m.rightPanePageSize()
-				if m.scrollOffset < len(lines)-pageSize {
+				if m.scrollOffset < lineCount-pageSize {
 					m.scrollOffset++
 				}
 			}
@@ -525,9 +532,6 @@ func pollGit(ctx context.Context) tea.Cmd {
 
 func pollGitBranch(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		out, err := exec.CommandContext(pollCtx, "git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
@@ -540,9 +544,6 @@ func pollGitBranch(ctx context.Context) tea.Cmd {
 
 func pollGitDirty(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		out, err := exec.CommandContext(pollCtx, "git", "status", "--porcelain").Output() //nolint:gosec
@@ -573,9 +574,6 @@ func pollDocker(ctx context.Context) tea.Cmd {
 
 func pollDockerContainer(ctx context.Context, name string) tea.Cmd {
 	return func() tea.Msg {
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		out, err := exec.CommandContext(pollCtx, "docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
@@ -595,9 +593,6 @@ func runCmd(ctx context.Context, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
 		if len(cmd) == 0 {
 			return cmdResultMsg{err: fmt.Errorf("no command to execute")}
-		}
-		if ctx == nil {
-			ctx = context.Background()
 		}
 		c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
 		out, err := c.CombinedOutput()

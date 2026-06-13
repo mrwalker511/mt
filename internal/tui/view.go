@@ -285,8 +285,10 @@ func (m Model) renderScrollableOutput(output string) string {
 		end = len(lines)
 	}
 	visible := strings.Join(lines[offset:end], "\n")
-	result := normalItemStyle.Render(visible)
-	result += "\n" + dimItemStyle.Render(fmt.Sprintf(
-		"  ── %d/%d lines  [j↓ k↑] ──", offset+1, len(lines)))
-	return result
+	var sb strings.Builder
+	sb.WriteString(normalItemStyle.Render(visible))
+	sb.WriteString("\n")
+	sb.WriteString(dimItemStyle.Render(fmt.Sprintf(
+		"  ── %d/%d lines  [j↓ k↑] ──", offset+1, len(lines))))
+	return sb.String()
 }
