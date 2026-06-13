@@ -38,6 +38,57 @@ mt
 | `Tab` / `Shift+Tab` | Switch workspace (when multiple workspaces configured) |
 | `q` / `Ctrl+C` | Quit (cancels any running commands) |
 
+## AI Assistant
+
+Press `/` to open a natural-language prompt bar. Describe what you want in plain English and press `Enter`. The assistant maps your request to one of three actions:
+
+- **Run a target** — executes an existing target by name
+- **Generate a command** — proposes a new command (you must press `Enter` to confirm before it runs)
+- **Answer a question** — replies inline in ≤ 2 sentences
+
+Press `Esc` to cancel at any time.
+
+### On-device: Apple Foundation Models (macOS 26+)
+
+Zero network dependency. Requires Apple Intelligence enabled on your Mac.
+
+```sh
+make apple-bridge                      # compile mt-apple-bridge (run once)
+cp mt-apple-bridge "$(dirname $(which mt))/"   # place it alongside the mt binary
+```
+
+```yaml
+llm:
+  provider: apple
+```
+
+### Local: llama.cpp with Metal (Apple Silicon)
+
+Full GPU acceleration via Metal. Works with any GGUF model.
+
+```sh
+brew install llama.cpp
+llama-server -m ~/models/mistral-7b-instruct.Q4_K_M.gguf \
+             --n-gpu-layers 99 --port 8080
+```
+
+```yaml
+llm:
+  provider: llamacpp
+  # base_url: http://localhost:8080   # default
+```
+
+### Cloud: OpenAI
+
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  api_key: sk-...   # or set OPENAI_API_KEY env var
+```
+
+---
+
 ## Configuration
 
 `mt` looks for a config file in order:
