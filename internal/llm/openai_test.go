@@ -17,7 +17,7 @@ func TestGenerateOpenAI_HTTP500_ReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Provider: "openai", BaseURL: srv.URL, APIKey: "test-key"}
-	_, err := Generate(context.Background(), cfg, "hello")
+	_, err := Generate(context.Background(), cfg, "system", "hello")
 	if err == nil {
 		t.Fatal("expected error for HTTP 500")
 	}
@@ -41,12 +41,12 @@ func TestGenerateOpenAI_LargeBody_NotOOM(t *testing.T) {
 
 	cfg := Config{Provider: "litellm", BaseURL: srv.URL}
 	// expect either a decode error (truncated JSON) or a valid response — not a hang or OOM
-	_, _ = Generate(context.Background(), cfg, "hello")
+	_, _ = Generate(context.Background(), cfg, "system", "hello")
 }
 
 func TestGenerateOpenAI_BadBaseURL_ReturnsError(t *testing.T) {
 	cfg := Config{Provider: "litellm", BaseURL: "not a valid url"}
-	_, err := Generate(context.Background(), cfg, "hello")
+	_, err := Generate(context.Background(), cfg, "system", "hello")
 	if err == nil {
 		t.Fatal("expected error for invalid base_url")
 	}
@@ -58,7 +58,7 @@ func TestGenerateOpenAI_BadBaseURL_ReturnsError(t *testing.T) {
 func TestGenerateOpenAI_MissingKey_ReturnsError(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	cfg := Config{Provider: "openai", Model: "gpt-4o-mini"}
-	_, err := Generate(context.Background(), cfg, "hello")
+	_, err := Generate(context.Background(), cfg, "system", "hello")
 	if err == nil {
 		t.Fatal("expected error for missing API key")
 	}
@@ -75,6 +75,20 @@ func TestGenerateOpenAI_Dispatch(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Errorf("unexpected auth header: %s", r.Header.Get("Authorization"))
 		}
+		var req openAIRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		if len(req.Messages) != 2 {
+			t.Errorf("expected 2 messages, got %d", len(req.Messages))
+		} else {
+			if req.Messages[0].Role != "system" {
+				t.Errorf("expected messages[0].role=system, got %q", req.Messages[0].Role)
+			}
+			if req.Messages[1].Role != "user" {
+				t.Errorf("expected messages[1].role=user, got %q", req.Messages[1].Role)
+			}
+		}
 		resp := openAIResponse{
 			Choices: []openAIChoice{
 				{Message: openAIMessage{Role: "assistant", Content: "INFO: test answer"}},
@@ -86,7 +100,7 @@ func TestGenerateOpenAI_Dispatch(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Provider: "openai", Model: "gpt-4o-mini", BaseURL: srv.URL, APIKey: "test-key"}
-	got, err := Generate(context.Background(), cfg, "test query")
+	got, err := Generate(context.Background(), cfg, "sys prompt", "test query")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,6 +117,13 @@ func TestGenerateLiteLLM_IsDefault(t *testing.T) {
 		if auth := r.Header.Get("Authorization"); auth != "" {
 			t.Errorf("litellm should not send auth header by default, got: %s", auth)
 		}
+		var req openAIRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		if len(req.Messages) != 2 || req.Messages[0].Role != "system" || req.Messages[1].Role != "user" {
+			t.Errorf("expected system+user messages, got %+v", req.Messages)
+		}
 		resp := openAIResponse{
 			Choices: []openAIChoice{
 				{Message: openAIMessage{Role: "assistant", Content: "INFO: litellm reply"}},
@@ -115,7 +136,7 @@ func TestGenerateLiteLLM_IsDefault(t *testing.T) {
 
 	for _, provider := range []string{"", "litellm"} {
 		cfg := Config{Provider: provider, Model: "llama3.1:8b", BaseURL: srv.URL}
-		got, err := Generate(context.Background(), cfg, "test")
+		got, err := Generate(context.Background(), cfg, "sys", "test")
 		if err != nil {
 			t.Fatalf("provider=%q unexpected error: %v", provider, err)
 		}
@@ -130,6 +151,13 @@ func TestGenerateLlamaCpp_Dispatch(t *testing.T) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
+		var req openAIRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		if len(req.Messages) != 2 || req.Messages[0].Role != "system" || req.Messages[1].Role != "user" {
+			t.Errorf("expected system+user messages, got %+v", req.Messages)
+		}
 		resp := openAIResponse{
 			Choices: []openAIChoice{
 				{Message: openAIMessage{Role: "assistant", Content: "INFO: llamacpp reply"}},
@@ -141,7 +169,7 @@ func TestGenerateLlamaCpp_Dispatch(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Provider: "llamacpp", BaseURL: srv.URL}
-	got, err := Generate(context.Background(), cfg, "test")
+	got, err := Generate(context.Background(), cfg, "sys", "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

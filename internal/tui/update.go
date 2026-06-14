@@ -706,8 +706,7 @@ func parseLLMResponse(response string) (action, payload string) {
 // runLLMQuery sends the user query to the configured LLM and returns the response as a msg.
 func runLLMQuery(ctx context.Context, cfg llm.Config, systemPrompt, query string) tea.Cmd {
 	return func() tea.Msg {
-		fullPrompt := systemPrompt + "\nUser: " + query + "\nResponse:"
-		resp, err := llm.Generate(ctx, cfg, fullPrompt)
+		resp, err := llm.Generate(ctx, cfg, systemPrompt, query)
 		return llmResponseMsg{response: resp, err: err}
 	}
 }

@@ -12,7 +12,8 @@ import (
 
 const DefaultAppleBridgeName = "mt-apple-bridge"
 
-func generateApple(ctx context.Context, cfg Config, prompt string) (string, error) {
+func generateApple(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
+	prompt := systemPrompt + "\nUser: " + userMessage + "\nResponse:"
 	bridgePath := cfg.BridgePath
 	if bridgePath == "" {
 		if exe, err := os.Executable(); err == nil {

@@ -49,25 +49,25 @@
 # Runs entirely on-device using the Metal GPU; works with any GGUF model.
 #   brew install llama.cpp
 #
-# M5 Max (36 GB unified memory) recommended settings:
-#   llama-server -m ~/models/mistral-7b-instruct.Q4_K_M.gguf \
+# Gemma 4 on M5 Max (36 GB unified memory):
+#   # Download from huggingface.co/bartowski/google_gemma-4-27b-it-GGUF
+#   llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
 #                --n-gpu-layers 99 \
-#                --ctx-size 8192 \
+#                --ctx-size 32768 \
 #                --threads 10 \
 #                --port 8080
 #
-#   --n-gpu-layers 99  offloads all transformer layers to Metal GPU
-#   --ctx-size 8192    36 GB fits large contexts; raise to 16384 for bigger models
-#   --threads 10       matches M5 Max's 10 performance cores
+#   --n-gpu-layers 99   offloads all transformer layers to Metal GPU
+#   --ctx-size 32768    Gemma 4 supports 128 K; raise as RAM budget allows
+#   --threads 10        matches M5 Max's 10 performance cores
 #
-# Model size guide for 36 GB unified memory:
-#   Q4_K_M quantisation: fits 70B models on-device
-#   Q8_0   quantisation: fits up to ~34B models
-#   F16                : fits up to ~17B models
+# Gemma 4 model size guide for 36 GB:
+#   gemma-4-27b-it-Q4_K_M.gguf  (~16 GB) — best speed/quality balance
+#   gemma-4-27b-it-Q8_0.gguf    (~29 GB) — highest quality, still fits
 #
 # llm:
 #   provider: llamacpp
-#   model: mistral-7b-instruct   # informational label; server uses the loaded model
+#   model: gemma-4-27b-it   # informational label; server uses the loaded model
 #   # base_url: http://localhost:8080   # default
 #
 # ── OpenAI or any OpenAI-compatible cloud provider ─────────────────────────────

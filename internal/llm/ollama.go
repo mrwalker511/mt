@@ -13,15 +13,15 @@ type Config struct {
 
 // Generate dispatches to the configured provider and returns the full response text.
 // Returns a human-readable error the TUI can display directly.
-func Generate(ctx context.Context, cfg Config, prompt string) (string, error) {
+func Generate(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
 	switch cfg.Provider {
 	case "openai":
-		return generateOpenAI(ctx, cfg, prompt)
+		return generateOpenAI(ctx, cfg, systemPrompt, userMessage)
 	case "llamacpp":
-		return generateLlamaCpp(ctx, cfg, prompt)
+		return generateLlamaCpp(ctx, cfg, systemPrompt, userMessage)
 	case "apple":
-		return generateApple(ctx, cfg, prompt)
+		return generateApple(ctx, cfg, systemPrompt, userMessage)
 	default: // "litellm" or ""
-		return generateLiteLLM(ctx, cfg, prompt)
+		return generateLiteLLM(ctx, cfg, systemPrompt, userMessage)
 	}
 }
