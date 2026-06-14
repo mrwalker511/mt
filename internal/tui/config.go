@@ -120,6 +120,11 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 	if homeErr != nil {
 		return fileConfig{}, fmt.Errorf("cannot determine home directory: %w", homeErr)
 	}
+	// Resolve symlinks in home so the prefix check is consistent with the
+	// symlink-resolved include paths below (on macOS /var → /private/var).
+	if realHome, err := filepath.EvalSymlinks(home); err == nil {
+		home = realHome
+	}
 	dir := filepath.Dir(absPath)
 	for _, inc := range cfg.Include {
 		if !filepath.IsAbs(inc) {
