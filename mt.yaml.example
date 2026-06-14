@@ -48,8 +48,22 @@
 # ── llama.cpp — Metal-accelerated local inference (Apple Silicon) ──────────────
 # Runs entirely on-device using the Metal GPU; works with any GGUF model.
 #   brew install llama.cpp
+#
+# M5 Max (36 GB unified memory) recommended settings:
 #   llama-server -m ~/models/mistral-7b-instruct.Q4_K_M.gguf \
-#                --n-gpu-layers 99 --port 8080
+#                --n-gpu-layers 99 \
+#                --ctx-size 8192 \
+#                --threads 10 \
+#                --port 8080
+#
+#   --n-gpu-layers 99  offloads all transformer layers to Metal GPU
+#   --ctx-size 8192    36 GB fits large contexts; raise to 16384 for bigger models
+#   --threads 10       matches M5 Max's 10 performance cores
+#
+# Model size guide for 36 GB unified memory:
+#   Q4_K_M quantisation: fits 70B models on-device
+#   Q8_0   quantisation: fits up to ~34B models
+#   F16                : fits up to ~17B models
 #
 # llm:
 #   provider: llamacpp
