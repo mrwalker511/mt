@@ -184,6 +184,63 @@ See [`mt.yaml.example`](mt.yaml.example) for a full multi-workspace template wit
 
 For the full field reference, include directive rules, sequence/parallel/SSH examples, and security model, see [`docs/manual.html`](docs/manual.html). For a detailed breakdown of the GitHub Actions CI workflow, see [`docs/ci.html`](docs/ci.html).
 
+## macOS Deployment
+
+### Install
+
+```sh
+make install                 # builds and copies mt → /usr/local/bin/mt
+make install-apple-bridge    # builds and copies mt-apple-bridge → /usr/local/bin/mt-apple-bridge
+```
+
+After installing the Apple bridge, clear Gatekeeper's quarantine attribute (ad-hoc signing satisfies the FoundationModels entitlement but not Gatekeeper's network-download check):
+
+```sh
+xattr -d com.apple.quarantine /usr/local/bin/mt-apple-bridge
+```
+
+### Config file permissions
+
+```sh
+# macOS
+chmod 600 ~/Library/Application\ Support/mt/config.yaml
+```
+
+`mt` rejects world-writable configs but doesn't enforce 0600 — set it manually so other local users can't read your targets or API keys.
+
+### API keys
+
+Prefer the environment variable over storing the key in YAML:
+
+```sh
+export OPENAI_API_KEY=sk-...   # add to ~/.zshrc or ~/.bash_profile
+```
+
+If you do store a key in the config file, the `chmod 600` above protects it from other local users.
+
+### Apple Silicon / Metal GPU (M-series)
+
+**Apple Foundation Models** (on-device, zero network, macOS 26+): see [On-device: Apple Foundation Models](#on-device-apple-foundation-models-macos-26) above.
+
+**llama.cpp with Metal** — optimal settings for M5 Max (36 GB unified memory):
+
+```sh
+brew install llama.cpp
+llama-server -m ~/models/mistral-7b-instruct.Q4_K_M.gguf \
+             --n-gpu-layers 99 \
+             --ctx-size 8192 \
+             --threads 10 \
+             --port 8080
+```
+
+| Flag | Why |
+|------|-----|
+| `--n-gpu-layers 99` | Offloads all transformer layers to Metal; maximises GPU utilisation |
+| `--ctx-size 8192` | 36 GB of unified memory fits large contexts; raise to `16384` for large models |
+| `--threads 10` | Matches M5 Max's 10 performance cores |
+
+Model size guide for 36 GB unified memory: Q4_K_M fits 70B models; Q8_0 fits ~34B; F16 fits ~17B.
+
 ## Security
 
 `mt` runs commands exactly as written in your config — no shell expansion. Protections applied at config load time:

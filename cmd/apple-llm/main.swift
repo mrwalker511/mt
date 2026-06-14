@@ -1,3 +1,4 @@
+#if canImport(FoundationModels)
 import FoundationModels
 import Foundation
 
@@ -29,3 +30,8 @@ Task {
 
 sema.wait()
 exit(exitCode)
+#else
+import Foundation
+fputs("error: FoundationModels is not available — requires macOS 26+ with Apple Intelligence enabled\n", stderr)
+exit(1)
+#endif
