@@ -70,6 +70,27 @@
 #   model: gemma-4-27b-it   # informational label; server uses the loaded model
 #   # base_url: http://localhost:8080   # default
 #
+# ── MLX — fastest on-device option for Apple Silicon ──────────────────────────
+# mlx_lm.server speaks the OpenAI /v1/chat/completions API on port 8000.
+# Models are downloaded automatically on first run from Hugging Face.
+#   pip install mlx-lm
+#
+# Gemma 4 (27B, 4-bit — fits in 16 GB, recommended for M5 Max):
+#   python -m mlx_lm.server \
+#     --model mlx-community/gemma-4-27b-it-4bit \
+#     --port 8000
+#
+# GPT-OSS 20B (4-bit — ~12 GB, faster responses):
+#   python -m mlx_lm.server \
+#     --model mlx-community/gpt-oss-20B-instruct-4bit \
+#     --port 8000
+#
+# llm:
+#   provider: mlx
+#   model: gemma-4-27b-it-4bit   # informational label; server uses the loaded model
+#   # base_url: http://localhost:8000   # default
+#   # debug: true                       # append requests/responses to ~/.mt/logs/debug.log
+#
 # ── OpenAI or any OpenAI-compatible cloud provider ─────────────────────────────
 #
 # llm:

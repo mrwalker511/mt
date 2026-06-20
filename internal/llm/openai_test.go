@@ -177,3 +177,35 @@ func TestGenerateLlamaCpp_Dispatch(t *testing.T) {
 		t.Errorf("unexpected response: %q", got)
 	}
 }
+
+func TestGenerateMLX_Dispatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var req openAIRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		if len(req.Messages) != 2 || req.Messages[0].Role != "system" || req.Messages[1].Role != "user" {
+			t.Errorf("expected system+user messages, got %+v", req.Messages)
+		}
+		resp := openAIResponse{
+			Choices: []openAIChoice{
+				{Message: openAIMessage{Role: "assistant", Content: "INFO: mlx reply"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	cfg := Config{Provider: "mlx", BaseURL: srv.URL}
+	got, err := Generate(context.Background(), cfg, "sys", "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "INFO: mlx reply" {
+		t.Errorf("unexpected response: %q", got)
+	}
+}

@@ -707,7 +707,35 @@ func parseLLMResponse(response string) (action, payload string) {
 func runLLMQuery(ctx context.Context, cfg llm.Config, systemPrompt, query string) tea.Cmd {
 	return func() tea.Msg {
 		resp, err := llm.Generate(ctx, cfg, systemPrompt, query)
+		if cfg.Debug {
+			writeLLMDebugLog(cfg, systemPrompt, query, resp, err)
+		}
 		return llmResponseMsg{response: resp, err: err}
+	}
+}
+
+// writeLLMDebugLog appends a timestamped entry to ~/.mt/logs/debug.log.
+func writeLLMDebugLog(cfg llm.Config, systemPrompt, query, resp string, callErr error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(home, ".mt", "logs")
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	ts := time.Now().UTC().Format(time.RFC3339)
+	if callErr != nil {
+		fmt.Fprintf(f, "[%s] provider=%s model=%s\nSystem: %s\nUser: %s\nError: %v\n\n",
+			ts, cfg.Provider, cfg.Model, systemPrompt, query, callErr)
+	} else {
+		fmt.Fprintf(f, "[%s] provider=%s model=%s\nSystem: %s\nUser: %s\nResponse: %s\n\n",
+			ts, cfg.Provider, cfg.Model, systemPrompt, query, resp)
 	}
 }
 
