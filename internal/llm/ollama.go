@@ -4,11 +4,12 @@ import "context"
 
 // Config holds the LLM provider settings, parsed from the top-level llm: YAML key.
 type Config struct {
-	Provider   string `yaml:"provider"`    // "litellm" (default) | "llamacpp" | "openai" | "apple"
+	Provider   string `yaml:"provider"`    // "litellm" (default) | "llamacpp" | "mlx" | "openai" | "apple"
 	Model      string `yaml:"model"`       // model name as understood by the chosen provider
 	BaseURL    string `yaml:"base_url"`    // override the provider's default endpoint
 	APIKey     string `yaml:"api_key"`     // OpenAI only; falls back to OPENAI_API_KEY env var
 	BridgePath string `yaml:"bridge_path"` // apple only: path to mt-apple-bridge binary
+	Debug      bool   `yaml:"debug"`       // append request/response to ~/.mt/logs/debug.log
 }
 
 // Generate dispatches to the configured provider and returns the full response text.
@@ -19,6 +20,8 @@ func Generate(ctx context.Context, cfg Config, systemPrompt, userMessage string)
 		return generateOpenAI(ctx, cfg, systemPrompt, userMessage)
 	case "llamacpp":
 		return generateLlamaCpp(ctx, cfg, systemPrompt, userMessage)
+	case "mlx":
+		return generateMLX(ctx, cfg, systemPrompt, userMessage)
 	case "apple":
 		return generateApple(ctx, cfg, systemPrompt, userMessage)
 	default: // "litellm" or ""

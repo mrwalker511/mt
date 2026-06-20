@@ -245,7 +245,18 @@
         <li><a href="#feat-ai">AI assistant</a></li>
       </ul>
     </li>
-    <li><a href="#config-llm">LLM configuration</a></li>
+    <li><a href="#config-llm">LLM configuration</a>
+      <ul>
+        <li><a href="#llm-litellm">LiteLLM proxy</a></li>
+        <li><a href="#llm-llamacpp">llama.cpp + Metal</a></li>
+        <li><a href="#llm-mlx">MLX (Apple Silicon)</a></li>
+        <li><a href="#llm-openai">OpenAI / cloud</a></li>
+        <li><a href="#llm-apple">Apple Foundation Models</a></li>
+        <li><a href="#llm-fields">Field reference</a></li>
+        <li><a href="#llm-debug">Debug logging</a></li>
+      </ul>
+    </li>
+    <li><a href="#macos-deploy">macOS Deployment</a></li>
     <li><a href="#defaults">Default Workspaces</a></li>
     <li><a href="#security">Security Model</a></li>
     <li><a href="#troubleshoot">Troubleshooting</a></li>
@@ -287,9 +298,12 @@ make build   # produces ./mt in the project root</code></pre>
   <thead><tr><th>Command</th><th>Action</th></tr></thead>
   <tbody>
     <tr><td><code>make build</code></td><td>Compile binary to <code>./mt</code></td></tr>
+    <tr><td><code>make install</code></td><td>Install <code>mt</code> to <code>/usr/local/bin/mt</code></td></tr>
     <tr><td><code>make test</code></td><td>Run test suite</td></tr>
     <tr><td><code>make vet</code></td><td>Run <code>go vet</code></td></tr>
     <tr><td><code>make clean</code></td><td>Remove compiled binary</td></tr>
+    <tr><td><code>make apple-bridge</code></td><td><span class="badge macos">macOS</span> Compile Swift bridge to <code>./mt-apple-bridge</code> (requires macOS 26 + Xcode CLI tools)</td></tr>
+    <tr><td><code>make install-apple-bridge</code></td><td><span class="badge macos">macOS</span> Install bridge binary to <code>/usr/local/bin/mt-apple-bridge</code></td></tr>
   </tbody>
 </table>
 
@@ -585,9 +599,9 @@ domains:
 
 <!-- ── LLM Configuration ─────────────────────────────────────────────── -->
 <h2 id="config-llm">LLM configuration <a class="anchor" href="#config-llm">#</a></h2>
-<p>The AI assistant supports three providers: <strong>LiteLLM</strong> (local proxy, default), <strong>llama.cpp</strong> (direct server), and <strong>OpenAI</strong> (cloud). All three speak the OpenAI <code>/v1/chat/completions</code> API. Switch with a single <code>provider:</code> line.</p>
+<p>The AI assistant supports five providers: <strong>LiteLLM</strong> (local proxy, default), <strong>llama.cpp</strong> (Metal-accelerated GGUF), <strong>MLX</strong> (Apple Silicon native, fastest), <strong>OpenAI</strong> (cloud), and <strong>Apple Foundation Models</strong> (on-device, macOS 26+). All providers except Apple speak the OpenAI <code>/v1/chat/completions</code> API. Switch with a single <code>provider:</code> line in your config.</p>
 
-<h3>LiteLLM proxy (default — port 4000)</h3>
+<h3 id="llm-litellm">LiteLLM proxy (default — port 4000)</h3>
 <p>LiteLLM acts as a unified gateway in front of any model backend (Ollama, vLLM, cloud APIs, etc.).</p>
 <pre><code>pip install litellm
 
@@ -595,40 +609,150 @@ domains:
 litellm --model ollama/llama3.1:8b
 # or
 litellm --model gpt-4o-mini   # requires OPENAI_API_KEY in env</code></pre>
+<pre><code>llm:
+  provider: litellm           # or omit — litellm is the default
+  model: llama3.1:8b
+  # base_url: http://localhost:4000   # default</code></pre>
 
-<h3>llama.cpp server (port 8080)</h3>
-<pre><code># Build or download a llama.cpp release, then:
-./llama-server -m /path/to/model.gguf --port 8080</code></pre>
+<h3 id="llm-llamacpp">llama.cpp + Metal GPU (port 8080) <span class="badge macos">macOS</span></h3>
+<p>llama.cpp runs GGUF models entirely on-device using Apple's Metal GPU. On an M5 Max with 36 GB unified memory, <code>--n-gpu-layers 99</code> offloads all transformer layers to the GPU.</p>
+<pre><code>brew install llama.cpp
+
+# Gemma 4 27B (download from huggingface.co/bartowski/google_gemma-4-27b-it-GGUF)
+llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
+             --n-gpu-layers 99 \
+             --ctx-size 32768 \
+             --threads 10 \
+             --port 8080</code></pre>
+<table>
+  <thead><tr><th>Flag</th><th>Value</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>--n-gpu-layers 99</code></td><td>All layers → Metal GPU</td><td>Required for full speed on Apple Silicon; set lower to fall back to CPU for layers that don't fit</td></tr>
+    <tr><td><code>--ctx-size 32768</code></td><td>32 K tokens</td><td>Gemma 4 supports 128 K; raise as RAM budget allows</td></tr>
+    <tr><td><code>--threads 10</code></td><td>10 threads</td><td>Matches M5 Max's 10 performance cores</td></tr>
+  </tbody>
+</table>
+<p>Gemma 4 model size guide for 36 GB unified memory:</p>
+<ul>
+  <li><code>gemma-4-27b-it-Q4_K_M.gguf</code> (~16 GB) — best speed/quality balance</li>
+  <li><code>gemma-4-27b-it-Q8_0.gguf</code> (~29 GB) — highest quality, still fits</li>
+</ul>
 <pre><code>llm:
   provider: llamacpp
-  base_url: http://localhost:8080   # default; omit if using the default port</code></pre>
+  model: gemma-4-27b-it   # informational label; server uses the loaded model
+  # base_url: http://localhost:8080   # default</code></pre>
 
-<h3>OpenAI / OpenAI-compatible cloud</h3>
+<h3 id="llm-mlx">MLX — Apple Silicon native inference (port 8000) <span class="badge macos">macOS</span></h3>
+<p>Apple's MLX framework compiles models for the unified memory architecture of Apple Silicon, typically delivering the fastest token throughput of any local option on M-series hardware.</p>
+<pre><code>pip install mlx-lm
+
+# Gemma 4 27B 4-bit (~16 GB) — recommended for M5 Max
+python -m mlx_lm.server \
+  --model mlx-community/gemma-4-27b-it-4bit \
+  --port 8000
+
+# GPT-OSS 20B 4-bit (~12 GB) — faster, lighter
+python -m mlx_lm.server \
+  --model mlx-community/gpt-oss-20B-instruct-4bit \
+  --port 8000</code></pre>
+<p>Models are downloaded automatically from Hugging Face on first run.</p>
+<pre><code>llm:
+  provider: mlx
+  model: gemma-4-27b-it-4bit   # informational label; server uses the loaded model
+  # base_url: http://localhost:8000   # default</code></pre>
+
+<h3 id="llm-openai">OpenAI / OpenAI-compatible cloud</h3>
 <pre><code>llm:
   provider: openai
   model: gpt-4o-mini        # or gpt-4o, o1-mini, etc.
   base_url: https://api.openai.com   # override for vLLM, LMStudio, etc.
   api_key: sk-...           # or set OPENAI_API_KEY env var</code></pre>
 
-<h3>YAML field reference</h3>
+<h3 id="llm-apple">Apple Foundation Models (on-device, no API key) <span class="badge macos">macOS</span></h3>
+<p>Uses Apple's <code>FoundationModels</code> framework, available on macOS 26+ with Apple Intelligence enabled. Inference runs entirely on-device via the Neural Engine — no network request, no API key.</p>
+<p>A small bridge binary (<code>mt-apple-bridge</code>) is required because Go cannot import Swift frameworks directly. Build it once from the repository root:</p>
+<pre><code>make apple-bridge            # compiles cmd/apple-llm/main.swift → ./mt-apple-bridge
+make install-apple-bridge    # installs to /usr/local/bin/mt-apple-bridge</code></pre>
+<p>The bridge is code-signed with the <code>com.apple.developer.foundation-models.inference</code> entitlement required by the framework. Place the binary alongside the <code>mt</code> binary or anywhere in <code>$PATH</code>.</p>
+<pre><code>llm:
+  provider: apple
+  # bridge_path: /usr/local/bin/mt-apple-bridge   # optional; searched in PATH by default</code></pre>
+<div class="callout">
+  <strong>Requires macOS 26+ and Apple Intelligence</strong>
+  Enable Apple Intelligence in System Settings → Apple Intelligence &amp; Siri. The bridge will print <em>"FoundationModels is not available"</em> if the device or OS does not support it.
+</div>
+
+<h3 id="llm-fields">YAML field reference</h3>
 <table>
   <thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>provider</code></td><td><code>litellm</code></td><td><code>litellm</code>, <code>llamacpp</code>, or <code>openai</code>.</td></tr>
-    <tr><td><code>model</code></td><td><em>provider-specific</em></td><td>Model name passed to the provider. LiteLLM uses its own routing (e.g. <code>ollama/llama3.1:8b</code>); llama.cpp ignores it.</td></tr>
-    <tr><td><code>base_url</code></td><td><code>http://localhost:4000</code> / <code>:8080</code> / openai.com</td><td>API base URL. Override to point at any OpenAI-compatible server.</td></tr>
-    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>Required for <code>openai</code> provider only. Ignored by LiteLLM and llama.cpp.</td></tr>
+    <tr><td><code>provider</code></td><td><code>litellm</code></td><td><code>litellm</code>, <code>llamacpp</code>, <code>mlx</code>, <code>openai</code>, or <code>apple</code>.</td></tr>
+    <tr><td><code>model</code></td><td><em>provider-specific</em></td><td>Model name passed to the provider. MLX and llama.cpp treat it as an informational label (the server uses whatever model it loaded). LiteLLM uses it for routing (e.g. <code>ollama/llama3.1:8b</code>).</td></tr>
+    <tr><td><code>base_url</code></td><td><code>http://localhost:4000</code> / <code>:8080</code> / <code>:8000</code> / openai.com</td><td>API base URL. Override to point at any OpenAI-compatible server.</td></tr>
+    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>Required for <code>openai</code> provider only. Ignored by all local providers.</td></tr>
+    <tr><td><code>bridge_path</code></td><td><em>auto-discovered</em></td><td><code>apple</code> provider only. Absolute path to <code>mt-apple-bridge</code>. If omitted, mt looks next to the <code>mt</code> binary then searches <code>$PATH</code>.</td></tr>
+    <tr><td><code>debug</code></td><td><code>false</code></td><td>When <code>true</code>, appends every LLM request and response to <code>~/.mt/logs/debug.log</code>. See <a href="#llm-debug">Debug logging</a>.</td></tr>
   </tbody>
 </table>
 
+<h3 id="llm-debug">Debug logging</h3>
+<p>Set <code>debug: true</code> under <code>llm:</code> to record every AI assistant interaction:</p>
+<pre><code>llm:
+  provider: mlx
+  model: gemma-4-27b-it-4bit
+  debug: true</code></pre>
+<p>Each interaction appends a timestamped block to <code>~/.mt/logs/debug.log</code>:</p>
+<pre><code>[2026-06-14T20:30:00Z] provider=mlx model=gemma-4-27b-it-4bit
+System: You are an AI assistant embedded in mt…
+User: open outlook
+Response: RUN:Open Outlook</code></pre>
+<p>The log file is created with mode <code>0600</code> (owner-readable only). The directory (<code>~/.mt/logs/</code>) is shared with the <code>S</code> key output-save feature.</p>
+
 <div class="callout warn">
   <strong>Server not reachable</strong>
-  <em>"litellm: not reachable at http://localhost:4000"</em> — start the LiteLLM proxy first. <em>"llamacpp: not reachable at http://localhost:8080"</em> — start <code>llama-server</code> first. <em>"openai: no API key"</em> — set <code>api_key</code> in config or <code>OPENAI_API_KEY</code> env var.
+  <em>"litellm: not reachable at http://localhost:4000"</em> — start the LiteLLM proxy first. <em>"llamacpp: not reachable at http://localhost:8080"</em> — start <code>llama-server</code> first. <em>"mlx: not reachable at http://localhost:8000"</em> — start <code>mlx_lm.server</code> first. <em>"openai: no API key"</em> — set <code>api_key</code> in config or <code>OPENAI_API_KEY</code> env var. Enable <code>debug: true</code> to see exact request/response details.
 </div>
 
 <h3>Microsoft Copilot</h3>
 <p>For Microsoft Office tasks, Copilot is available directly within Outlook, Word, and Excel if your Microsoft 365 subscription includes it. The built-in <em>Copilot Chat</em> target in the Microsoft Edge domain opens <code>copilot.microsoft.com</code>. The <em>Copilot in Word</em> and <em>Copilot in Excel</em> targets in their respective domains provide status notes reminding you to use Copilot from within the app.</p>
 <p>Programmatic Microsoft Copilot API integration (for use directly from the mt AI prompt) requires Azure credentials and is outside the scope of this tool's built-in LLM feature.</p>
+
+<!-- ── macOS Deployment ──────────────────────────────────────────────── -->
+<h2 id="macos-deploy">macOS Deployment <span class="badge macos">macOS</span> <a class="anchor" href="#macos-deploy">#</a></h2>
+
+<h3>Installing the binary</h3>
+<pre><code>git clone https://github.com/mrwalker511/mt
+cd mt
+make build                    # produces ./mt
+make install                  # copies to /usr/local/bin/mt</code></pre>
+<p>Or install just the binary without source:</p>
+<pre><code>go install github.com/mrwalker511/mt@latest
+# binary lands in $(go env GOPATH)/bin — ensure that's on $PATH</code></pre>
+
+<h3>Config file location</h3>
+<pre><code>mkdir -p ~/Library/Application\ Support/mt
+cp mt.yaml.example ~/Library/Application\ Support/mt/config.yaml</code></pre>
+<p>A <code>./mt.yaml</code> in the current directory takes precedence over the system config. Useful during development; avoid it in shared directories.</p>
+
+<h3>Apple Foundation Models bridge</h3>
+<pre><code>make apple-bridge             # compiles Swift → ./mt-apple-bridge (requires Xcode CLI tools)
+make install-apple-bridge     # copies to /usr/local/bin/mt-apple-bridge</code></pre>
+<p>Requires macOS 26 and Apple Intelligence enabled. The bridge binary must reside alongside <code>mt</code> or anywhere in <code>$PATH</code>. Override the path with <code>bridge_path:</code> in your config.</p>
+
+<h3>MLX setup</h3>
+<pre><code>pip install mlx-lm
+
+# Run once to download and start the server (model cached in ~/.cache/huggingface)
+python -m mlx_lm.server --model mlx-community/gpt-oss-20B-instruct-4bit --port 8000</code></pre>
+
+<h3>llama.cpp + Metal setup</h3>
+<pre><code>brew install llama.cpp
+# Download a GGUF from Hugging Face, then:
+llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
+             --n-gpu-layers 99 --ctx-size 32768 --threads 10 --port 8080</code></pre>
+
+<h3>Symlink note</h3>
+<p>On macOS, <code>/tmp</code> and system temp directories resolve through <code>/private</code> (e.g. <code>/var/folders/…</code> → <code>/private/var/folders/…</code>). mt handles this transparently — include paths are validated after symlink resolution so you will not see false "outside home directory" errors.</p>
 
 <!-- ── Default Workspaces ────────────────────────────────────────────── -->
 <h2 id="defaults">Default Workspaces <a class="anchor" href="#defaults">#</a></h2>
@@ -738,6 +862,44 @@ litellm --model gpt-4o-mini   # requires OPENAI_API_KEY in env</code></pre>
     </tr>
   </tbody>
 </table>
+
+<h3>AI assistant / LLM errors</h3>
+<table>
+  <thead><tr><th>Error / symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>"not reachable at http://localhost:…"</td>
+      <td>Local server is not running</td>
+      <td>Start <code>mlx_lm.server</code>, <code>llama-server</code>, or <code>litellm</code> before opening mt. Check the port matches your config.</td>
+    </tr>
+    <tr>
+      <td>"openai: no API key"</td>
+      <td>Missing API key for <code>openai</code> provider</td>
+      <td>Set <code>api_key: sk-…</code> in config or export <code>OPENAI_API_KEY</code> in your shell</td>
+    </tr>
+    <tr>
+      <td>"apple: mt-apple-bridge not found"</td>
+      <td>Bridge binary not built or not in PATH</td>
+      <td>Run <code>make apple-bridge &amp;&amp; make install-apple-bridge</code>, or set <code>bridge_path:</code> in config</td>
+    </tr>
+    <tr>
+      <td>Apple bridge: "FoundationModels is not available"</td>
+      <td>macOS &lt; 26, or Apple Intelligence not enabled</td>
+      <td>Upgrade to macOS 26+ and enable Apple Intelligence in System Settings → Apple Intelligence &amp; Siri</td>
+    </tr>
+    <tr>
+      <td>LLM response is garbled or ignores instructions</td>
+      <td>Wrong model for the task, or context too short</td>
+      <td>Enable <code>debug: true</code> to inspect what the model received. For llama.cpp, increase <code>--ctx-size</code>. For MLX, try a larger quantisation (e.g. switch from 4-bit to 8-bit).</td>
+    </tr>
+    <tr>
+      <td>AI request hangs or times out</td>
+      <td>Server overloaded or stalled</td>
+      <td>Press <code>Esc</code> to cancel. Check server logs. Reduce <code>--ctx-size</code> on llama-server.</td>
+    </tr>
+  </tbody>
+</table>
+<p>Debug log location when <code>debug: true</code> is set: <code>~/.mt/logs/debug.log</code>. Each entry shows the exact system prompt, user query, and response.</p>
 
 <h3>Clipboard not working</h3>
 <p>The <code>y</code> key copies output using a platform clipboard tool:</p>

@@ -18,6 +18,7 @@ const (
 	DefaultOpenAIModel     = "gpt-4o-mini"
 	DefaultLiteLLMBaseURL  = "http://localhost:4000"
 	DefaultLlamaCppBaseURL = "http://localhost:8080"
+	DefaultMLXBaseURL      = "http://localhost:8000"
 
 	maxResponseBytes = 1 << 20 // 1 MB — ample for any chat completion
 )
@@ -146,6 +147,18 @@ func generateLlamaCpp(ctx context.Context, cfg Config, systemPrompt, userMessage
 	result, err := generateOpenAICompat(ctx, baseURL, cfg.Model, cfg.APIKey, systemPrompt, userMessage)
 	if err != nil {
 		return "", fmt.Errorf("llamacpp: %w", err)
+	}
+	return result, nil
+}
+
+func generateMLX(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = DefaultMLXBaseURL
+	}
+	result, err := generateOpenAICompat(ctx, baseURL, cfg.Model, cfg.APIKey, systemPrompt, userMessage)
+	if err != nil {
+		return "", fmt.Errorf("mlx: %w", err)
 	}
 	return result, nil
 }
