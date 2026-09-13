@@ -1,2 +1,5 @@
 # compiled binary
 mt
+
+# local per-user config override (see mt.yaml.example)
+mt.yaml
