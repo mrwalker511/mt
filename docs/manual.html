@@ -232,6 +232,7 @@
       <ul>
         <li><a href="#config-locations">File locations</a></li>
         <li><a href="#config-structure">YAML structure</a></li>
+        <li><a href="#config-run">Writing commands</a></li>
         <li><a href="#config-fields">Field reference</a></li>
         <li><a href="#config-workspaces">Multi-workspace</a></li>
         <li><a href="#config-apps">Apps shorthand</a></li>
@@ -432,9 +433,9 @@ domains:
     targets:
       - name: "Start Server"
         status: "Press [Enter] to start"
-        cmd: ["npm", "run", "dev"]
+        run: npm run dev
       - name: "Run Tests"
-        cmd: ["npm", "test"]</code></pre>
+        run: npm test</code></pre>
 
 <pre><code># Multi-workspace config
 workspaces:
@@ -443,24 +444,46 @@ workspaces:
       - name: "Outlook"
         targets:
           - name: "New Email"
-            cmd: ["open", "ms-outlook://compose"]
+            run: open ms-outlook://compose
             launch_msg: "Opening new email…"
   - name: "Dev"
     domains:
       - name: "Context/Git"
         targets:
           - name: "Git Status"
-            cmd: ["git", "status"]</code></pre>
+            run: git status</code></pre>
+
+<h3 id="config-run">Writing commands: <code>run</code> and <code>cmd</code></h3>
+<p><code>run:</code> takes a command the way you would type it in Terminal. mt splits it into words when the config loads and runs the program directly, exactly as if you had written the equivalent <code>cmd:</code> list.</p>
+<table>
+  <thead><tr><th>You write</th><th>mt runs</th></tr></thead>
+  <tbody>
+    <tr><td><code>run: git log --oneline -n 10</code></td><td><code>["git", "log", "--oneline", "-n", "10"]</code></td></tr>
+    <tr><td><code>run: open -a "Microsoft Word"</code></td><td><code>["open", "-a", "Microsoft Word"]</code></td></tr>
+    <tr><td><code>run: git commit -m 'Fix the "login" bug'</code></td><td><code>["git", "commit", "-m", "Fix the \"login\" bug"]</code></td></tr>
+    <tr><td><code>run: echo My\ Folder</code></td><td><code>["echo", "My Folder"]</code></td></tr>
+  </tbody>
+</table>
+<p>Quoting rules match a shell: whitespace separates words, <code>'single quotes'</code> keep everything literally, <code>"double quotes"</code> allow <code>\"</code> and <code>\\</code> escapes, and a backslash outside quotes escapes the next character.</p>
+<div class="callout warn">
+  <strong>There is no shell</strong>
+  Pipes (<code>|</code>), <code>&amp;&amp;</code>, <code>;</code>, redirects (<code>&gt;</code>, <code>&lt;</code>), <code>$VARS</code>, backticks and a leading <code>~</code> would only be passed to the program as literal text, so mt rejects them when the config loads and names the target. Quote them to pass them literally (<code>run: echo "a | b"</code>), or ask for a shell explicitly:
+  <pre><code>- name: "Count Go files"
+  cmd: ["sh", "-c", "ls *.go | wc -l"]</code></pre>
+</div>
+<p>On <a href="#feat-ssh">SSH targets</a> the rules differ: the <code>run:</code> string goes to the remote shell unchanged, so shell syntax is allowed there.</p>
+<p>Use <code>cmd:</code> when an argument is long or awkward to quote, such as a multi-line AppleScript passed to <code>osascript -e</code>. YAML note: if a <code>run:</code> value starts with a quote or contains <code>: </code> or <code> #</code>, wrap the whole value in the other kind of quotes, e.g. <code>run: '"/Applications/My App.app/Contents/MacOS/app" --flag'</code>.</p>
 
 <h3 id="config-fields">Field reference</h3>
 <table>
   <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>name</code></td><td>Yes</td><td>Display label for workspace, domain, or target</td></tr>
-    <tr><td><code>cmd</code></td><td>No</td><td>Command and arguments to execute on Enter, as a YAML list: <code>["git", "status"]</code>. Omit to make a target display-only.</td></tr>
+    <tr><td><code>run</code></td><td>No</td><td>Command to execute on Enter, written as you would type it: <code>run: git log --oneline -n 10</code>. See <a href="#config-run">Writing commands</a>. Omit both <code>run</code> and <code>cmd</code> to make a target display-only.</td></tr>
+    <tr><td><code>cmd</code></td><td>No</td><td>The same command as an explicit YAML list: <code>["git", "status"]</code>. Use it when an argument is awkward to quote. A target sets <code>run</code> or <code>cmd</code>, not both.</td></tr>
     <tr><td><code>status</code></td><td>No</td><td>Hint text shown in the right pane before the command has been run. Supports newlines.</td></tr>
-    <tr><td><code>launch_msg</code></td><td>No</td><td>Message shown when <code>cmd</code> exits successfully with no output (e.g. <code>open -a</code> produces no stdout).</td></tr>
-    <tr><td><code>host</code></td><td>No</td><td>SSH host in <code>[user@]hostname</code> form. If set, <code>cmd</code> is executed as <code>ssh host &lt;cmd&gt;</code>. See <a href="#feat-ssh">SSH targets</a>.</td></tr>
+    <tr><td><code>launch_msg</code></td><td>No</td><td>Message shown when the command exits successfully with no output (e.g. <code>open -a</code> produces no stdout).</td></tr>
+    <tr><td><code>host</code></td><td>No</td><td>SSH host in <code>[user@]hostname</code> form. If set, the command runs as <code>ssh host &lt;command&gt;</code>. See <a href="#feat-ssh">SSH targets</a>.</td></tr>
     <tr><td><code>sequence</code></td><td>No</td><td>Ordered list of target names to run in series. If any step fails, the sequence stops. See <a href="#feat-sequence">Sequence</a>.</td></tr>
     <tr><td><code>apps</code></td><td>No</td><td>Domain-level, macOS only. List of app names; each expands to an <code>open -a</code> target. Shorthand for common launchers. See <a href="#config-apps">Apps shorthand</a>.</td></tr>
     <tr><td><code>include</code></td><td>No</td><td>Top-level. List of YAML file paths to merge into this config. See <a href="#config-include">Include directive</a>.</td></tr>
@@ -478,7 +501,7 @@ workspaces:
       - name: "Dev"
         targets:
           - name: "Build"
-            cmd: ["make", "build"]
+            run: make build
 
   - name: "Personal"
     domains:
@@ -508,7 +531,7 @@ domains:
   - name: "Personal"
     targets:
       - name: "Check Mail"
-        cmd: ["open", "-a", "Mail"]</code></pre>
+        run: open -a Mail</code></pre>
 <p>Include rules:</p>
 <ul>
   <li>Relative paths resolve relative to the file that declares them. A leading <code>~/</code> expands to your home directory.</li>
@@ -523,7 +546,7 @@ domains:
 <h2 id="features">Features <a class="anchor" href="#features">#</a></h2>
 
 <h3 id="feat-single">Single command</h3>
-<p>The default mode. Navigate to any target with a <code>cmd:</code> field and press <code>Enter</code>. The command runs asynchronously; the right pane shows output when it completes. While a command runs, the right pane shows <em>Running…</em> and <code>Enter</code> is ignored. Press <code>Esc</code> to stop it (useful for commands that never exit on their own, such as <code>tail -f</code>).</p>
+<p>The default mode. Navigate to any target with a <code>run:</code> or <code>cmd:</code> field and press <code>Enter</code>. The command runs asynchronously; the right pane shows output when it completes. While a command runs, the right pane shows <em>Running…</em> and <code>Enter</code> is ignored. Press <code>Esc</code> to stop it (useful for commands that never exit on their own, such as <code>tail -f</code>).</p>
 <p>You can move to other targets while a command runs. When it finishes, its output is filed under the target that ran it, so you see it when you return to that target.</p>
 <p>Output (stdout and stderr combined) is capped at 1 MB while the command runs; anything beyond that is discarded and a truncation notice is appended. Commands run without a terminal and with stdin closed, so interactive prompts will not work.</p>
 
@@ -536,15 +559,15 @@ domains:
         sequence: ["Build", "Test", "Deploy"]
 
       - name: "Build"
-        cmd: ["make", "build"]
+        run: make build
       - name: "Test"
-        cmd: ["make", "test"]
+        run: make test
       - name: "Deploy"
-        cmd: ["./scripts/deploy.sh", "production"]</code></pre>
+        run: ./scripts/deploy.sh production</code></pre>
 <p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails). Step names are looked up across every domain in the current workspace. Rules:</p>
 <ul>
   <li>If a step name does not match any target (e.g. a typo), the sequence refuses to start and names the missing step, so a pipeline can never silently skip <em>Test</em> and go straight to <em>Deploy</em>.</li>
-  <li>A step with no <code>cmd:</code> (including a step that is itself a sequence) produces an error and stops the sequence.</li>
+  <li>A step with no <code>run:</code>/<code>cmd:</code> (including a step that is itself a sequence) produces an error and stops the sequence.</li>
   <li>If two targets share a step's name, the one in the last domain wins. Keep step names unique.</li>
   <li><code>Esc</code> stops the current step and the rest of the sequence.</li>
 </ul>
@@ -556,7 +579,7 @@ domains:
   <li>Press <code>Space</code> to toggle each target you want to run. A <code>◆</code> marker appears before selected targets.</li>
   <li>Press <code>Enter</code> to run all selected targets in parallel.</li>
 </ol>
-<p>When all commands complete, output is shown with <code>=== Target Name ===</code> headers so you can identify each result, and each target gets its own ✓/✗ badge. Selection is cleared automatically after execution. Targets without a <code>cmd:</code> (including sequence targets) are skipped in a parallel run. <code>Esc</code> stops all of them.</p>
+<p>When all commands complete, output is shown with <code>=== Target Name ===</code> headers so you can identify each result, and each target gets its own ✓/✗ badge. Selection is cleared automatically after execution. Targets without a command (including sequence targets) are skipped in a parallel run. <code>Esc</code> stops all of them.</p>
 
 <h3 id="feat-ssh">SSH targets</h3>
 <p>Set the <code>host:</code> field to run a command on a remote server:</p>
@@ -565,16 +588,16 @@ domains:
     targets:
       - name: "Deploy"
         host: "deploy@prod.example.com"
-        cmd: ["./deploy.sh", "--env", "production"]
+        run: ./deploy.sh --env production
         launch_msg: "Deploy started…"
 
       - name: "Tail Logs"
         host: "app@prod.example.com"
-        cmd: ["journalctl", "-fu", "myapp"]</code></pre>
+        run: journalctl -fu myapp</code></pre>
 <p>With <code>host:</code> set, mt runs <code>ssh host &lt;cmd&gt;</code>. SSH uses your existing key configuration (<code>~/.ssh/config</code>, <code>ssh-agent</code>). No credentials are stored by mt. Commands that never exit, like the <code>journalctl -f</code> example above, keep running until you press <code>Esc</code>.</p>
 <div class="callout warn">
   <strong>The remote shell interprets the command</strong>
-  SSH joins the <code>cmd:</code> array with spaces and hands it to the remote user's shell, so on SSH targets quoting, globs, pipes and <code>$VARS</code> <em>are</em> interpreted remotely. This is unlike local targets, which never go through a shell. Quote arguments that contain spaces yourself, e.g. <code>cmd: ["ls", "'My Dir'"]</code>.
+  On an SSH target, the <code>run:</code> string is sent to the remote machine exactly as written, just as if you had typed it after <code>ssh host</code>. The remote shell interprets it, so pipes, quotes, globs and <code>$VARS</code> work there (e.g. <code>run: journalctl -u myapp | grep -i error</code>), and mt's local shell-syntax check does not apply. With <code>cmd:</code>, ssh joins the list with spaces before sending it, so you must add remote quoting yourself (<code>cmd: ["ls", "'My Dir'"]</code>). Prefer <code>run:</code> for SSH targets.
 </div>
 <div class="callout">
   <strong>Host validation</strong>

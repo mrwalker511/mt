@@ -16,7 +16,8 @@ type Domain struct {
 type Target struct {
 	Name      string   `yaml:"name"`
 	Status    string   `yaml:"status"`     // static hint shown before any execution
-	Cmd       []string `yaml:"cmd"`        // shell command to run on Enter; nil = not configured
+	Cmd       []string `yaml:"cmd"`        // command and arguments to run on Enter; nil = not configured
+	Run       string   `yaml:"run"`        // shorthand for cmd as one string; split into Cmd at load time
 	LaunchMsg string   `yaml:"launch_msg"` // shown when Cmd succeeds but produces no output (e.g. open -a)
 	Sequence  []string `yaml:"sequence"`   // ordered list of target names to run in series
 	Host      string   `yaml:"host"`       // SSH host; if set, cmd is run via ssh host <cmd>

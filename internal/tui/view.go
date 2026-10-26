@@ -148,7 +148,7 @@ func (m Model) renderHelp() string {
 		case len(t.Sequence) > 0:
 			lines = append(lines, dimItemStyle.Render("sequence: "+strings.Join(t.Sequence, " → ")))
 		case len(t.Cmd) > 0:
-			lines = append(lines, dimItemStyle.Render("$ "+strings.Join(effectiveCmd(t), " ")))
+			lines = append(lines, dimItemStyle.Render("$ "+displayCmd(t)))
 		default:
 			lines = append(lines, dimItemStyle.Render("(no command configured)"))
 		}
@@ -159,6 +159,26 @@ func (m Model) renderHelp() string {
 	}
 	lines = append(lines, "", dimItemStyle.Render("Full list: mt --keys"))
 	return strings.Join(lines, "\n")
+}
+
+// displayCmd returns the target's command as the user would type it: the run:
+// string as written, or the cmd: list with arguments containing spaces quoted.
+func displayCmd(t Target) string {
+	if t.Run != "" {
+		if t.Host != "" {
+			return "ssh " + t.Host + " " + t.Run
+		}
+		return t.Run
+	}
+	parts := effectiveCmd(t)
+	out := make([]string, len(parts))
+	for i, p := range parts {
+		if p == "" || strings.ContainsAny(p, " \t\n'\"") {
+			p = "'" + strings.ReplaceAll(p, "'", `'\''`) + "'"
+		}
+		out[i] = p
+	}
+	return strings.Join(out, " ")
 }
 
 // domainLiveHeader returns a styled one-liner of live probe data for the current
