@@ -18,7 +18,7 @@
 #
 # ─── Multi-workspace config ────────────────────────────────────────────────────
 # Use workspaces: to group different sets of domains and switch between them
-# with Tab / Shift+Tab inside mt.
+# with [ and ] inside mt, or jump to one with 1–9.
 #
 # ──────────────────────────────────────────────────────────────────────────────
 #

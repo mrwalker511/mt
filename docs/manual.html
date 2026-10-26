@@ -222,7 +222,12 @@
         <li><a href="#first-steps">First steps</a></li>
       </ul>
     </li>
-    <li><a href="#keys">Keyboard Reference</a></li>
+    <li><a href="#keys">Keyboard Reference</a>
+      <ul>
+        <li><a href="#keys-prompt">AI prompt bar</a></li>
+        <li><a href="#keys-terminal">Terminal setup</a></li>
+      </ul>
+    </li>
     <li><a href="#config">Configuration</a>
       <ul>
         <li><a href="#config-locations">File locations</a></li>
@@ -326,7 +331,7 @@ make build   # produces ./mt in the project root</code></pre>
 │   Infrastructure │                      │                                  │
 │   Context/Git    │                      │                                  │
 └──────────────────┴──────────────────────┴──────────────────────────────────┘
- [↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [/] AI  [?] Help …</span></div>
+ ⏎ Run  ␣ Select  ⇥ Pane  / Ask AI  c Copy  ⌫ Clear  ? Keys  q Quit</span></div>
 
 <ul>
   <li><strong>Left pane</strong> — Domain list. Arrow keys or <code>j</code>/<code>k</code> move the cursor. Domains group related targets (e.g. "Outlook", "Infrastructure", "Context/Git").</li>
@@ -336,42 +341,61 @@ make build   # produces ./mt in the project root</code></pre>
 
 <h3 id="first-steps">First steps</h3>
 <ol>
-  <li>Press <code>→</code> or <code>l</code> to move focus to the middle pane.</li>
-  <li>Use <code>↑</code>/<code>↓</code> or <code>k</code>/<code>j</code> to select a target.</li>
-  <li>Press <code>Enter</code> to run it. Output appears in the right pane.</li>
-  <li>Press <code>?</code> at any time for a help overlay.</li>
-  <li>Press <code>q</code> or <code>Ctrl+C</code> to quit.</li>
+  <li>Use <code>↑</code> / <code>↓</code> to pick a domain, then press <code>→</code> or <code>⇥</code> to move focus to the middle pane.</li>
+  <li>Use <code>↑</code> / <code>↓</code> to pick a target.</li>
+  <li>Press <code>⏎</code> Return to run it. Output appears in the right pane. Press <code>⎋</code> Esc to stop a command that keeps running.</li>
+  <li>Press <code>c</code> to copy the output, just like <code>⌘C</code>.</li>
+  <li>Press <code>?</code> at any time for the key reference, and <code>q</code> to quit.</li>
 </ol>
 
 <!-- ── Keyboard Reference ───────────────────────────────────────────── -->
 <h2 id="keys">Keyboard Reference <a class="anchor" href="#keys">#</a></h2>
+<p>Keys follow Mac conventions. A terminal app never receives the <code>⌘</code> key (Terminal.app and iTerm2 keep it for their own menus), so each <code>⌘</code> shortcut becomes the same letter on its own: <code>⌘C</code> → <code>c</code>, <code>⌘S</code> → <code>s</code>, <code>⌘R</code> → <code>r</code>, <code>⌘Q</code> → <code>q</code>. Press <code>?</code> inside mt for a compact reference, or run <code>mt --keys</code> in a shell to print the full list.</p>
 <table>
   <thead>
-    <tr><th>Key</th><th>Context</th><th>Action</th></tr>
+    <tr><th>Key</th><th>Context</th><th>Action</th><th>Mac mnemonic</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>↑</code> / <code>k</code></td><td>Left pane</td><td>Move domain cursor up</td></tr>
-    <tr><td><code>↓</code> / <code>j</code></td><td>Left pane</td><td>Move domain cursor down</td></tr>
-    <tr><td><code>↑</code> / <code>k</code></td><td>Middle pane</td><td>Move target cursor up</td></tr>
-    <tr><td><code>↓</code> / <code>j</code></td><td>Middle pane</td><td>Move target cursor down</td></tr>
-    <tr><td><code>↑</code> / <code>k</code></td><td>Right pane</td><td>Scroll output up</td></tr>
-    <tr><td><code>↓</code> / <code>j</code></td><td>Right pane</td><td>Scroll output down</td></tr>
-    <tr><td><code>←</code> / <code>h</code></td><td>Any</td><td>Focus left pane</td></tr>
-    <tr><td><code>→</code> / <code>l</code></td><td>Any</td><td>Focus right pane</td></tr>
-    <tr><td><code>Enter</code></td><td>Middle pane</td><td>Execute selected target (or all multi-selected targets in parallel)</td></tr>
-    <tr><td><code>Space</code></td><td>Middle pane</td><td>Toggle multi-select on current target</td></tr>
-    <tr><td><code>Tab</code></td><td>Any (2+ workspaces)</td><td>Switch to next workspace</td></tr>
-    <tr><td><code>Shift+Tab</code></td><td>Any (2+ workspaces)</td><td>Switch to previous workspace</td></tr>
-    <tr><td><code>y</code></td><td>Any</td><td>Copy right-pane output to clipboard</td></tr>
-    <tr><td><code>S</code></td><td>Any</td><td>Save right-pane output to <code>~/.mt/logs/mt-TIMESTAMP.txt</code></td></tr>
-    <tr><td><code>c</code></td><td>Any</td><td>Clear right-pane output</td></tr>
-    <tr><td><code>R</code></td><td>Any</td><td>Reload config file without restarting</td></tr>
-    <tr><td><code>/</code></td><td>Any</td><td>Open AI assistant prompt bar (natural-language input)</td></tr>
-    <tr><td><code>Esc</code></td><td>Any</td><td>Close the AI prompt bar, cancel an in-flight AI request, reject a proposed AI command, or stop the running command(s)</td></tr>
-    <tr><td><code>?</code></td><td>Any</td><td>Toggle help overlay</td></tr>
-    <tr><td><code>q</code> / <code>Ctrl+C</code></td><td>Any</td><td>Quit (cancels any running commands)</td></tr>
+    <tr><td><code>⏎</code> Return</td><td>Any</td><td>Run the selected target (or every selected target, in parallel)</td><td>Open</td></tr>
+    <tr><td><code>␣</code> Space</td><td>Middle pane</td><td>Select / deselect a target for a parallel run</td><td>Finder selection</td></tr>
+    <tr><td><code>⎋</code> Esc</td><td>Any</td><td>Stop the running command(s), cancel an in-flight AI request, reject a proposed AI command, or close the prompt bar</td><td>Cancel</td></tr>
+    <tr><td><code>/</code></td><td>Any</td><td>Open the AI assistant prompt bar</td><td></td></tr>
+    <tr><td><code>c</code></td><td>Any</td><td>Copy right-pane output to the clipboard</td><td>⌘C</td></tr>
+    <tr><td><code>s</code></td><td>Any</td><td>Save right-pane output to <code>~/.mt/logs/mt-TIMESTAMP.txt</code></td><td>⌘S</td></tr>
+    <tr><td><code>⌫</code> Delete / <code>⌃K</code></td><td>Any</td><td>Clear right-pane output</td><td>⌘K in Terminal</td></tr>
+    <tr><td><code>↑</code> / <code>↓</code></td><td>Left, middle pane</td><td>Move the domain / target cursor</td><td></td></tr>
+    <tr><td><code>↑</code> / <code>↓</code></td><td>Right pane</td><td>Scroll output one line</td><td></td></tr>
+    <tr><td><code>←</code> / <code>→</code></td><td>Any</td><td>Focus the pane to the left / right (stops at the edges)</td><td>Finder column view</td></tr>
+    <tr><td><code>⇥</code> / <code>⇧⇥</code></td><td>Any</td><td>Cycle pane focus forward / back (wraps around)</td><td>Tab between controls</td></tr>
+    <tr><td><code>fn↑</code> / <code>fn↓</code></td><td>Any</td><td>Page output up / down (Page Up / Page Down)</td><td></td></tr>
+    <tr><td><code>fn←</code> / <code>fn→</code></td><td>Any</td><td>Jump to top / bottom of output (Home / End)</td><td></td></tr>
+    <tr><td><code>[</code> / <code>]</code></td><td>2+ workspaces</td><td>Previous / next workspace</td><td>⌘⇧[ / ⌘⇧] switch tabs</td></tr>
+    <tr><td><code>1</code>–<code>9</code></td><td>2+ workspaces</td><td>Jump to workspace N</td><td>⌘1–⌘9</td></tr>
+    <tr><td><code>r</code></td><td>Any</td><td>Reload config file without restarting</td><td>⌘R</td></tr>
+    <tr><td><code>?</code></td><td>Any</td><td>Show / hide the key reference</td><td>⌘? Help</td></tr>
+    <tr><td><code>q</code> / <code>⌃C</code></td><td>Any</td><td>Quit (cancels any running commands)</td><td>⌘Q</td></tr>
   </tbody>
 </table>
+<p><strong>Older keys still work:</strong> <code>y</code> (copy), <code>S</code> (save), <code>R</code> (reload) and the vim-style <code>h</code> <code>j</code> <code>k</code> <code>l</code>. Two keys changed meaning in this version: <code>c</code> now copies (it used to clear; use <code>⌫</code>), and <code>Tab</code> now cycles panes (workspace switching moved to <code>[</code> / <code>]</code>).</p>
+
+<h3 id="keys-prompt">AI prompt bar</h3>
+<table>
+  <thead><tr><th>Key</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>⏎</code></td><td>Send the request</td></tr>
+    <tr><td><code>⎋</code></td><td>Close the prompt bar</td></tr>
+    <tr><td><code>⌫</code></td><td>Delete the last character</td></tr>
+    <tr><td><code>⌥⌫</code> / <code>⌃W</code></td><td>Delete the last word</td></tr>
+    <tr><td><code>⌃U</code></td><td>Clear the line (<code>⌘⌫</code> with iTerm2's Natural Text Editing preset)</td></tr>
+  </tbody>
+</table>
+
+<h3 id="keys-terminal">Terminal setup on macOS</h3>
+<ul>
+  <li><strong>Terminal.app:</strong> for <code>⌥⌫</code> to delete a word, tick <em>Settings → Profiles → Keyboard → Use Option as Meta key</em>. <code>⌃W</code> works without it.</li>
+  <li><strong>iTerm2:</strong> choose <em>Settings → Profiles → Keys → Key Mappings → Presets → Natural Text Editing</em>. Then <code>⌥⌫</code> deletes a word and <code>⌘⌫</code> clears the prompt line.</li>
+  <li><strong><code>fn↑</code> / <code>fn↓</code>:</strong> if the terminal scrolls its own window instead of mt's output, hold <code>⇧</code> as well, or focus the right pane and use <code>↑</code> / <code>↓</code>.</li>
+</ul>
 
 <!-- ── Configuration ────────────────────────────────────────────────── -->
 <h2 id="config">Configuration <a class="anchor" href="#config">#</a></h2>
@@ -445,7 +469,7 @@ workspaces:
 </table>
 
 <h3 id="config-workspaces">Multi-workspace</h3>
-<p>Wrap your domains in a <code>workspaces:</code> block to switch between independent contexts with <code>Tab</code> / <code>Shift+Tab</code>. Each workspace has its own domains, targets, run history, and output cache.</p>
+<p>Wrap your domains in a <code>workspaces:</code> block to switch between independent contexts with <code>[</code> / <code>]</code>, or jump straight to one with <code>1</code>–<code>9</code> (in config order). Each workspace has its own domains, targets, run history, and output cache.</p>
 <pre><code>workspaces:
   - name: "Work"
     domains:
@@ -581,17 +605,18 @@ domains:
 <table>
   <thead><tr><th>Key</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><code>↑</code>/<code>k</code> (right pane)</td><td>Scroll up</td></tr>
-    <tr><td><code>↓</code>/<code>j</code> (right pane)</td><td>Scroll down</td></tr>
-    <tr><td><code>c</code></td><td>Clear output from the right pane</td></tr>
-    <tr><td><code>y</code></td><td>Copy output to clipboard</td></tr>
-    <tr><td><code>S</code></td><td>Save output to <code>~/.mt/logs/mt-YYYYMMDD-HHMMSS.txt</code></td></tr>
+    <tr><td><code>↑</code> / <code>↓</code> (right pane)</td><td>Scroll one line</td></tr>
+    <tr><td><code>fn↑</code> / <code>fn↓</code></td><td>Page up / down</td></tr>
+    <tr><td><code>fn←</code> / <code>fn→</code></td><td>Jump to top / bottom</td></tr>
+    <tr><td><code>⌫</code></td><td>Clear output from the right pane</td></tr>
+    <tr><td><code>c</code></td><td>Copy output to clipboard</td></tr>
+    <tr><td><code>s</code></td><td>Save output to <code>~/.mt/logs/mt-YYYYMMDD-HHMMSS.txt</code></td></tr>
   </tbody>
 </table>
 <p>Cached output per target is bounded at 256 KB. Log files are written with exclusive creation (<code>O_EXCL</code>) to prevent race conditions.</p>
 
 <h3 id="feat-reload">Config hot-reload</h3>
-<p>Press <code>R</code> to reload your config file without quitting. This lets you edit <code>mt.yaml</code> in a separate terminal and instantly see the changes in the running <code>mt</code> session.</p>
+<p>Press <code>r</code> to reload your config file without quitting. This lets you edit <code>mt.yaml</code> in a separate terminal and instantly see the changes in the running <code>mt</code> session.</p>
 <p>Hot-reload also re-reads the <code>llm:</code> settings. It resets cursor positions, clears selections, and clears cached output. If the new config is invalid, an error is shown and the previous config continues in use.</p>
 
 <h3 id="feat-ai">AI assistant</h3>
@@ -721,7 +746,7 @@ make install-apple-bridge    # installs to /usr/local/bin/mt-apple-bridge</code>
 System: You are an AI assistant embedded in mt…
 User: open outlook
 Response: RUN:Open Outlook</code></pre>
-<p>The log file is created with mode <code>0600</code> (owner-readable only). The directory (<code>~/.mt/logs/</code>) is shared with the <code>S</code> key output-save feature.</p>
+<p>The log file is created with mode <code>0600</code> (owner-readable only). The directory (<code>~/.mt/logs/</code>) is shared with the <code>s</code> key output-save feature.</p>
 
 <div class="callout warn">
   <strong>Server not reachable</strong>
@@ -928,7 +953,7 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
 <p>Debug log location when <code>debug: true</code> is set: <code>~/.mt/logs/debug.log</code>. Each entry shows the exact system prompt, user query, and response.</p>
 
 <h3>Clipboard not working</h3>
-<p>The <code>y</code> key copies output using a platform clipboard tool:</p>
+<p>The <code>c</code> key copies output using a platform clipboard tool:</p>
 <ul>
   <li><span class="badge macos">macOS</span> Uses <code>pbcopy</code> (built-in, always available)</li>
   <li><span class="badge linux">Linux</span> Tries <code>xclip</code>, then <code>xsel</code>, then <code>wl-copy</code> (Wayland)</li>
@@ -957,7 +982,7 @@ sudo apt install wl-clipboard</code></pre>
 <p>mt requires a minimum terminal width to render correctly. Widen your terminal window if you see a "terminal too narrow" message.</p>
 
 <h3>Hot-reload wipes run history</h3>
-<p>Pressing <code>R</code> resets all cursor positions and cached target output. This is intentional — the workspace structure may have changed. Run your commands again after reloading.</p>
+<p>Pressing <code>r</code> resets all cursor positions and cached target output. This is intentional — the workspace structure may have changed. Run your commands again after reloading.</p>
 
 <hr>
 <p style="color:var(--muted);font-size:13px;">mt &nbsp;·&nbsp; <a href="https://github.com/mrwalker511/mt">github.com/mrwalker511/mt</a></p>

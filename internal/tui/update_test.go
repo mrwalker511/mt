@@ -453,7 +453,7 @@ func TestUpdate_ClearKey_ClearsOutput(t *testing.T) {
 		liveStatus: make(map[string]string),
 		runStates:  make(map[string]runResult),
 	}
-	m = press(m, key('c'))
+	m = press(m, tea.KeyMsg{Type: tea.KeyBackspace})
 	if m.output != "" {
 		t.Errorf("expected output cleared, got %q", m.output)
 	}
@@ -464,7 +464,7 @@ func TestUpdate_ClearKey_ClearsOutput(t *testing.T) {
 
 func TestUpdate_ClearKey_NoopWhenEmpty(t *testing.T) {
 	m := Model{liveStatus: make(map[string]string), runStates: make(map[string]runResult)}
-	m = press(m, key('c'))
+	m = press(m, tea.KeyMsg{Type: tea.KeyBackspace})
 	if m.output != "" || m.cmdErr != "" {
 		t.Error("expected empty model to stay empty after c")
 	}
@@ -577,29 +577,29 @@ func testWorkspaceModel() Model {
 	}
 }
 
-func TestUpdate_WorkspaceTab_CyclesForward(t *testing.T) {
+func TestUpdate_WorkspaceNextKey_CyclesForward(t *testing.T) {
 	m := testWorkspaceModel()
-	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	m = press(m, key(']'))
 	if m.workspaceIdx != 1 {
-		t.Errorf("expected workspaceIdx=1 after tab, got %d", m.workspaceIdx)
+		t.Errorf("expected workspaceIdx=1 after ], got %d", m.workspaceIdx)
 	}
 }
 
-func TestUpdate_WorkspaceShiftTab_CyclesPrev(t *testing.T) {
+func TestUpdate_WorkspacePrevKey_CyclesPrev(t *testing.T) {
 	m := testWorkspaceModel()
 	m.workspaceIdx = 1
 	m.domains = m.allWorkspaces[1].Domains
-	m = press(m, tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = press(m, key('['))
 	if m.workspaceIdx != 0 {
-		t.Errorf("expected workspaceIdx=0 after shift+tab, got %d", m.workspaceIdx)
+		t.Errorf("expected workspaceIdx=0 after [, got %d", m.workspaceIdx)
 	}
 }
 
-func TestUpdate_WorkspaceTab_Wraps(t *testing.T) {
+func TestUpdate_WorkspaceNextKey_Wraps(t *testing.T) {
 	m := testWorkspaceModel()
 	m.workspaceIdx = 2
 	m.domains = m.allWorkspaces[2].Domains
-	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	m = press(m, key(']'))
 	if m.workspaceIdx != 0 {
 		t.Errorf("expected wrap to 0, got %d", m.workspaceIdx)
 	}
@@ -609,7 +609,7 @@ func TestUpdate_WorkspaceSwitch_ResetsCursors(t *testing.T) {
 	m := testWorkspaceModel()
 	m.domainCursor = 0
 	m.targetCursor = 1
-	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	m = press(m, key(']'))
 	if m.domainCursor != 0 || m.targetCursor != 0 {
 		t.Errorf("expected cursors reset to 0, got domain=%d target=%d", m.domainCursor, m.targetCursor)
 	}
@@ -619,7 +619,7 @@ func TestUpdate_WorkspaceSwitch_ClearsOutput(t *testing.T) {
 	m := testWorkspaceModel()
 	m.output = "stale output"
 	m.cmdErr = "stale error"
-	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	m = press(m, key(']'))
 	if m.output != "" || m.cmdErr != "" {
 		t.Error("expected output/cmdErr cleared on workspace switch")
 	}
@@ -661,7 +661,7 @@ func TestUpdate_HelpToggle(t *testing.T) {
 	}
 }
 
-func TestUpdate_WorkspaceTab_SingleWorkspace_NoOp(t *testing.T) {
+func TestUpdate_WorkspaceNextKey_SingleWorkspace_NoOp(t *testing.T) {
 	m := Model{
 		activePane: paneLeft,
 		liveStatus: make(map[string]string),
@@ -672,7 +672,7 @@ func TestUpdate_WorkspaceTab_SingleWorkspace_NoOp(t *testing.T) {
 		workspaceIdx: 0,
 		domains:      []Domain{{Name: "D", Targets: []Target{{Name: "T"}}}},
 	}
-	m = press(m, tea.KeyMsg{Type: tea.KeyTab})
+	m = press(m, key(']'))
 	if m.workspaceIdx != 0 {
 		t.Errorf("expected no change for single workspace, got idx=%d", m.workspaceIdx)
 	}
@@ -871,7 +871,7 @@ func TestUpdate_WorkspaceSwitchClearsSelection(t *testing.T) {
 	}
 	m.selectedTargets[m.runKey("Domain A", "T1")] = true
 
-	tabMsg := tea.KeyMsg{Type: tea.KeyTab}
+	tabMsg := key(']')
 	m = press(m, tabMsg)
 	if len(m.selectedTargets) != 0 {
 		t.Error("expected selectedTargets to be cleared on workspace switch")

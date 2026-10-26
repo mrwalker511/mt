@@ -229,9 +229,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, runLLMQuery(llmCtx, m.llmConfig, m.buildSystemPrompt(), query)
 				}
 			case tea.KeyBackspace, tea.KeyCtrlH:
-				if r := []rune(m.inputBuf); len(r) > 0 {
+				if msg.Alt { // ⌥⌫ with Option sending Meta
+					m.inputBuf = deleteLastWord(m.inputBuf)
+				} else if r := []rune(m.inputBuf); len(r) > 0 {
 					m.inputBuf = string(r[:len(r)-1])
 				}
+			case tea.KeyCtrlW:
+				m.inputBuf = deleteLastWord(m.inputBuf)
+			case tea.KeyCtrlU:
+				m.inputBuf = ""
 			case tea.KeyRunes, tea.KeySpace:
 				if len([]rune(m.inputBuf))+len(msg.Runes) <= maxInputRunes {
 					m.inputBuf += string(msg.Runes)
@@ -257,34 +263,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		switch msg.String() {
-		case "q", "ctrl+c":
+		switch act := keyActions[msg.String()]; act {
+		case actQuit:
 			return m.quit()
 
-		case "?":
+		case actHelp:
 			m.showHelp = !m.showHelp
 
-		case "c":
+		case actClear:
 			m.output = ""
 			m.cmdErr = ""
 			m.scrollOffset = 0
 
-		case "y":
+		case actCopy:
 			if m.output != "" {
 				return m, copyToClipboard(m.output)
 			}
 
-		case "S":
+		case actSave:
 			if m.output != "" {
 				return m, saveOutputToFile(m.output)
 			}
 
-		case "/":
+		case actAI:
 			if !m.running && !m.llmPending {
 				m.inputMode, m.inputBuf = true, ""
 			}
 
-		case "esc":
+		case actCancel:
 			// Cancel in-flight work. The cancelled command or query still reports
 			// back through its result message, which clears the running state.
 			if m.llmPending && m.llmCancel != nil {
@@ -294,7 +300,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.runCancel()
 			}
 
-		case " ":
+		case actSelect:
 			if m.activePane == paneMiddle {
 				if key, ok := m.currentKey(); ok {
 					if m.selectedTargets[key] {
@@ -305,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "R":
+		case actReload:
 			workspaces, llmCfg, err := LoadWorkspaces()
 			if err != nil {
 				m.output, m.cmdErr = "", "Config reload error: "+err.Error()
@@ -318,17 +324,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cmdErr = ""
 			}
 
-		case "tab":
+		case actNextWorkspace:
 			if n := len(m.allWorkspaces); n > 1 {
-				m = m.saveTargetOutput().selectWorkspace((m.workspaceIdx + 1) % n).restoreTargetOutput()
+				m = m.switchWorkspace((m.workspaceIdx + 1) % n)
 			}
 
-		case "shift+tab":
+		case actPrevWorkspace:
 			if n := len(m.allWorkspaces); n > 1 {
-				m = m.saveTargetOutput().selectWorkspace((m.workspaceIdx - 1 + n) % n).restoreTargetOutput()
+				m = m.switchWorkspace((m.workspaceIdx - 1 + n) % n)
 			}
 
-		case "enter":
+		case actJumpWorkspace:
+			if i := int(msg.String()[0] - '1'); i < len(m.allWorkspaces) && i != m.workspaceIdx {
+				m = m.switchWorkspace(i)
+			}
+
+		case actRun:
 			if m.running {
 				return m, nil
 			}
@@ -359,17 +370,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startTarget(m.domains[m.domainCursor].Name, target)
 			}
 
-		case "left", "h":
+		case actPaneLeft:
 			if m.activePane > paneLeft {
 				m.activePane--
 			}
 
-		case "right", "l":
+		case actPaneRight:
 			if m.activePane < paneRight {
 				m.activePane++
 			}
 
-		case "up", "k":
+		case actNextPane:
+			m.activePane = (m.activePane + 1) % 3
+
+		case actPrevPane:
+			m.activePane = (m.activePane + 2) % 3
+
+		case actPageUp, actPageDown, actTop, actBottom:
+			// These always scroll the output, whichever pane has focus.
+			maxOffset := max(strings.Count(m.output, "\n")+1-m.rightPanePageSize(), 0)
+			switch act {
+			case actPageUp:
+				m.scrollOffset -= m.rightPanePageSize()
+			case actPageDown:
+				m.scrollOffset += m.rightPanePageSize()
+			case actTop:
+				m.scrollOffset = 0
+			case actBottom:
+				m.scrollOffset = maxOffset
+			}
+			m.scrollOffset = min(max(m.scrollOffset, 0), maxOffset)
+
+		case actUp:
 			switch m.activePane {
 			case paneLeft:
 				if m.domainCursor > 0 {
@@ -385,7 +417,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "down", "j":
+		case actDown:
 			switch m.activePane {
 			case paneLeft:
 				if m.domainCursor < len(m.domains)-1 {
@@ -425,6 +457,20 @@ func (m Model) moveCursor(domain, target int) Model {
 	m = m.restoreTargetOutput()
 	m.showHelp = false
 	return m
+}
+
+// switchWorkspace moves to workspace i, keeping each target's output cached.
+func (m Model) switchWorkspace(i int) Model {
+	return m.saveTargetOutput().selectWorkspace(i).restoreTargetOutput()
+}
+
+// deleteLastWord removes the last word (and any spaces after it) from s.
+func deleteLastWord(s string) string {
+	s = strings.TrimRight(s, " ")
+	if i := strings.LastIndex(s, " "); i >= 0 {
+		return s[:i+1]
+	}
+	return ""
 }
 
 // selectWorkspace makes workspace i active and resets cursors and selection.
