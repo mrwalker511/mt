@@ -1,7 +1,11 @@
+// Package tui implements mt's three-pane Bubble Tea interface: config loading,
+// target execution (single, sequence, parallel, SSH), live status polling and
+// the AI prompt bar.
 package tui
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,7 +87,7 @@ type Model struct {
 	domainCursor int
 	targetCursor int
 
-	domains       []Domain    // active workspace's domains
+	domains       []Domain // active workspace's domains
 	allWorkspaces []Workspace
 	workspaceIdx  int
 
@@ -104,7 +108,7 @@ type Model struct {
 
 	// multi-select (Space to toggle, Enter runs all in parallel)
 	selectedTargets map[string]bool   // set of runKeys checked for parallel execution
-	parallelOutputs map[string]string // per-label output accumulator during a parallel run
+	parallelOutputs map[string]string // per-runKey output accumulator during a parallel run
 	multiRunPending int               // number of parallel commands still in flight
 
 	// sequence execution (target.Sequence drives steps in order)
@@ -114,6 +118,9 @@ type Model struct {
 	// ctx is cancelled when the user quits, terminating all in-flight commands.
 	ctx    context.Context
 	cancel context.CancelFunc
+	// runCtx scopes the current run's commands; runCancel stops them (Esc).
+	runCtx    context.Context
+	runCancel context.CancelFunc
 
 	// AI natural-language input (/ key)
 	llmConfig  llm.Config
@@ -124,20 +131,11 @@ type Model struct {
 	confirmCmd []string           // non-nil when an AI-generated CMD awaits confirmation
 }
 
-// hasGitDomain reports whether the active workspace has a Context/Git domain.
-func (m Model) hasGitDomain() bool {
+// hasDomain reports whether the active workspace has a domain with the given name.
+// Live status polling is keyed off the "Context/Git" and "Infrastructure" names.
+func (m Model) hasDomain(name string) bool {
 	for _, d := range m.domains {
-		if d.Name == "Context/Git" {
-			return true
-		}
-	}
-	return false
-}
-
-// hasDockerDomain reports whether the active workspace has an Infrastructure domain.
-func (m Model) hasDockerDomain() bool {
-	for _, d := range m.domains {
-		if d.Name == "Infrastructure" {
+		if d.Name == name {
 			return true
 		}
 	}
@@ -158,28 +156,45 @@ func (m Model) runKey(domainName, targetName string) string {
 	return ws + "/" + domainName + "/" + targetName
 }
 
-// rightPanePageSize returns the number of content lines visible in the right pane.
+// currentKey returns the runKey of the selected target, or false if there is none.
+func (m Model) currentKey() (string, bool) {
+	t, ok := m.currentTarget()
+	if !ok {
+		return "", false
+	}
+	return m.runKey(m.domains[m.domainCursor].Name, t.Name), true
+}
+
+// rightPanePageSize returns the number of output lines visible in the right pane:
+// the pane height minus the title (2 lines), the scroll indicator (1 line), the
+// live-status header (2 lines, when shown) and the trailing error (2 lines, when shown).
 func (m Model) rightPanePageSize() int {
 	size := m.height - statusBarHeight - borderHeight - 3
+	if m.domainLiveHeader() != "" {
+		size -= 2
+	}
+	if m.cmdErr != "" {
+		size -= 2
+	}
 	if size < 1 {
 		return 1
 	}
 	return size
 }
 
+// cacheOutput stores output/cmdErr under key, capping output at maxCachedOutputBytes
+// to bound per-target memory use.
+func (m Model) cacheOutput(key, output, cmdErr string) {
+	if len(output) > maxCachedOutputBytes {
+		output = output[:maxCachedOutputBytes] + "\n…(cached output truncated)"
+	}
+	m.targetOutputs[key] = outputRecord{output, cmdErr}
+}
+
 // saveTargetOutput stores the current output/cmdErr under the active target's key.
-// Output is capped at maxCachedOutputBytes to bound per-target memory use.
 func (m Model) saveTargetOutput() Model {
-	if m.domainCursor < len(m.domains) {
-		targets := m.domains[m.domainCursor].Targets
-		if m.targetCursor < len(targets) {
-			key := m.runKey(m.domains[m.domainCursor].Name, targets[m.targetCursor].Name)
-			out := m.output
-			if len(out) > maxCachedOutputBytes {
-				out = out[:maxCachedOutputBytes] + "\n…(cached output truncated)"
-			}
-			m.targetOutputs[key] = outputRecord{out, m.cmdErr}
-		}
+	if key, ok := m.currentKey(); ok {
+		m.cacheOutput(key, m.output, m.cmdErr)
 	}
 	return m
 }
@@ -187,13 +202,9 @@ func (m Model) saveTargetOutput() Model {
 // restoreTargetOutput loads cached output for the newly active target, or clears if none.
 func (m Model) restoreTargetOutput() Model {
 	m.output, m.cmdErr, m.scrollOffset = "", "", 0
-	if m.domainCursor < len(m.domains) {
-		targets := m.domains[m.domainCursor].Targets
-		if m.targetCursor < len(targets) {
-			key := m.runKey(m.domains[m.domainCursor].Name, targets[m.targetCursor].Name)
-			if rec, ok := m.targetOutputs[key]; ok {
-				m.output, m.cmdErr = rec.output, rec.cmdErr
-			}
+	if key, ok := m.currentKey(); ok {
+		if rec, ok := m.targetOutputs[key]; ok {
+			m.output, m.cmdErr = rec.output, rec.cmdErr
 		}
 	}
 	return m
@@ -223,7 +234,7 @@ func New() Model {
 		llmConfig:       llmCfg,
 	}
 	if err != nil {
-		m.cmdErr = "Config error — using built-in defaults."
+		m.cmdErr = "Config error (using built-in defaults): " + err.Error()
 	}
 	return m
 }
@@ -241,8 +252,9 @@ func (m Model) findTargetByRunKey(key string) (Target, bool) {
 }
 
 // resolveSequenceTargets returns the Target structs for each name in order,
-// searching all domains of the active workspace.
-func (m Model) resolveSequenceTargets(names []string) []Target {
+// searching all domains of the active workspace. Unknown names are an error so a
+// typo can never silently drop a step (e.g. skip "Test" before "Deploy").
+func (m Model) resolveSequenceTargets(names []string) ([]Target, error) {
 	lookup := make(map[string]Target)
 	for _, d := range m.domains {
 		for _, t := range d.Targets {
@@ -251,23 +263,17 @@ func (m Model) resolveSequenceTargets(names []string) []Target {
 	}
 	out := make([]Target, 0, len(names))
 	for _, n := range names {
-		if t, ok := lookup[n]; ok {
-			out = append(out, t)
+		t, ok := lookup[n]
+		if !ok {
+			return nil, fmt.Errorf("sequence step %q not found in this workspace", n)
 		}
+		out = append(out, t)
 	}
-	return out
+	return out, nil
 }
 
 // Init fires the initial status polls and starts the refresh tick.
 // Git and Docker polls are skipped when the active workspace has no relevant domains.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tickCmd()}
-	if m.hasGitDomain() {
-		cmds = append(cmds, pollGit(m.ctx))
-	}
-	if m.hasDockerDomain() {
-		cmds = append(cmds, pollDocker(m.ctx))
-	}
-	return tea.Batch(cmds...)
+	return tea.Batch(append(m.pollCmds(), tickCmd())...)
 }
-

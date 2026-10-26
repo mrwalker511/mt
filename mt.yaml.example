@@ -29,7 +29,9 @@
 #   launch_msg — message shown when cmd exits 0 with no output (e.g. open -a)
 #   sequence   — ordered list of target names to run in series (stops on failure)
 #   host       — SSH host ([user@]hostname); cmd is run as: ssh host <cmd>
-#   include    — (top-level) list of YAML files to merge; must be within $HOME
+#   include    — (top-level) list of YAML files to merge; ~/ allowed; must be within $HOME
+#   apps       — (domain-level) list of Mac app names, each expanded to `open -a <name>`
+#   llm        — (top-level) AI assistant settings, see below
 #
 # ─── AI / LLM ─────────────────────────────────────────────────────────────────
 # Press [/] in mt to open the AI prompt bar. Type a natural-language request and
@@ -96,7 +98,7 @@
 # llm:
 #   provider: openai
 #   model: gpt-4o-mini           # or gpt-4o, o1-mini, etc.
-#   base_url: https://api.openai.com   # override for vLLM, LMStudio, etc.
+#   base_url: https://api.openai.com   # without /v1; override for vLLM, LMStudio, etc.
 #   api_key: sk-...              # or set OPENAI_API_KEY env var
 #
 # ── LiteLLM proxy (routes to many providers) ───────────────────────────────────
@@ -249,7 +251,8 @@ workspaces:
       - name: "RunLayer"
         targets:
           # Sequence: runs Build → Test → Deploy Staging in order.
-          # Any step that exits non-zero stops the sequence.
+          # Any step that exits non-zero stops the sequence. A step name that
+          # matches no target is an error, so the sequence won't start.
           - name: "Full Pipeline"
             sequence: ["Build", "Test", "Deploy Staging"]
 
@@ -271,6 +274,8 @@ workspaces:
 
           # SSH target: cmd runs on the remote host via `ssh host <cmd>`
           # host must match [a-zA-Z0-9][a-zA-Z0-9._@%-]* (no leading dash)
+          # The remote shell interprets the command. A command that never exits
+          # (like journalctl -f) keeps running until you press Esc.
           - name: "Tail Prod Logs"
             status: "Stream live application logs from production"
             # host: "deploy@prod.example.com"
@@ -307,7 +312,8 @@ workspaces:
 # ── Include directive ──────────────────────────────────────────────────────────
 # Split large configs into multiple files. Included paths must resolve within
 # $HOME (symlinks are followed and checked). Relative paths resolve from the
-# directory of the file that declares them. Circular includes are skipped.
+# directory of the file that declares them; ~/ expands to $HOME. Circular
+# includes are skipped. A missing include is a config error.
 #
 # include:
 #   - shared/team-tools.yaml          # relative to this file's directory

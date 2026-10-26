@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,9 @@ import (
 // Output beyond this limit is truncated with a notice. Prevents OOM from
 // runaway commands that produce large amounts of data.
 const maxOutputBytes = 1 << 20 // 1 MB
+
+// maxInputRunes caps the length of the AI prompt bar input.
+const maxInputRunes = 500
 
 // validHostRe matches SSH destinations of the form [user@]hostname where
 // hostname is composed of alphanumerics, dots, hyphens, and percent signs
@@ -66,14 +70,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		cmds := []tea.Cmd{tickCmd()}
-		if m.hasGitDomain() {
-			cmds = append(cmds, pollGit(m.ctx))
-		}
-		if m.hasDockerDomain() {
-			cmds = append(cmds, pollDocker(m.ctx))
-		}
-		return m, tea.Batch(cmds...)
+		return m, tea.Batch(append(m.pollCmds(), tickCmd())...)
 
 	case statusUpdateMsg:
 		m.liveStatus[msg.key] = msg.status
@@ -98,27 +95,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return cmdResultMsg{err: fmt.Errorf("sequence step %q has no command", nextName)}
 				}
 			}
-			return m, runCmd(m.ctx, execCmd, next.LaunchMsg)
+			return m, runCmd(m.runCtx, execCmd, next.LaunchMsg)
 		}
 
 		// Sequence complete, sequence failed, or normal single command done.
-		m.running = false
-		m.output = strings.TrimSpace(m.seqOutput + output)
+		m = m.finishRun()
+		output = strings.TrimSpace(m.seqOutput + output)
 		m.seqOutput = ""
 		m.seqQueue = nil
-		m.scrollOffset = 0
+		cmdErr := ""
 		if msg.err != nil {
-			m.cmdErr = msg.err.Error()
-			if m.pendingTarget != "" {
-				m.runStates[m.pendingTarget] = runFailure
+			cmdErr = msg.err.Error()
+		}
+		key := m.pendingTarget
+		m.pendingTarget = ""
+		if key != "" {
+			if msg.err != nil {
+				m.runStates[key] = runFailure
+			} else {
+				m.runStates[key] = runSuccess
 			}
-		} else {
-			m.cmdErr = ""
-			if m.pendingTarget != "" {
-				m.runStates[m.pendingTarget] = runSuccess
+			// The user may have moved to another target while this one ran:
+			// file the result under the target that produced it.
+			if cur, _ := m.currentKey(); cur != key {
+				m.cacheOutput(key, output, cmdErr)
+				return m, nil
 			}
 		}
-		m.pendingTarget = ""
+		m.output, m.cmdErr, m.scrollOffset = output, cmdErr, 0
 		return m, nil
 
 	case parallelCmdResultMsg:
@@ -129,25 +133,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.runStates[msg.key] = runSuccess
 		}
-		if len(out) > maxOutputBytes {
-			out = out[:maxOutputBytes] + "\n…(output truncated)"
-		}
-		m.parallelOutputs[msg.label] = out
+		m.parallelOutputs[msg.key] = "=== " + msg.label + " ===\n" + out
 		m.multiRunPending--
 		if m.multiRunPending == 0 {
-			m.running = false
-			labels := make([]string, 0, len(m.parallelOutputs))
-			for l := range m.parallelOutputs {
-				labels = append(labels, l)
+			m = m.finishRun()
+			keys := make([]string, 0, len(m.parallelOutputs))
+			for k := range m.parallelOutputs {
+				keys = append(keys, k)
 			}
-			sort.Strings(labels)
-			parts := make([]string, 0, len(labels))
-			for _, l := range labels {
-				parts = append(parts, "=== "+l+" ===\n"+m.parallelOutputs[l])
+			sort.Strings(keys)
+			parts := make([]string, 0, len(keys))
+			for _, k := range keys {
+				parts = append(parts, m.parallelOutputs[k])
 			}
 			m.output = strings.Join(parts, "\n\n")
 			m.parallelOutputs = make(map[string]string)
-			m.pendingTarget = ""
 			m.scrollOffset = 0
 		}
 		return m, nil
@@ -175,7 +175,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.llmPending = false
 		if msg.err != nil {
-			if !errors.Is(msg.err, context.Canceled) {
+			if errors.Is(msg.err, context.Canceled) {
+				m.cmdErr = "AI query cancelled."
+			} else {
 				m.cmdErr = "AI: " + msg.err.Error()
 			}
 			return m, nil
@@ -183,18 +185,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		action, payload := parseLLMResponse(msg.response)
 		switch action {
 		case "run":
+			if m.running {
+				m.cmdErr = "AI: a command is already running."
+				return m, nil
+			}
 			name := strings.TrimSpace(payload)
-			for _, d := range m.domains {
-				for _, t := range d.Targets {
+			for i, d := range m.domains {
+				for j, t := range d.Targets {
 					if strings.EqualFold(t.Name, name) {
-						ec := effectiveCmd(t)
-						if len(ec) == 0 {
-							m.cmdErr = "AI: target " + t.Name + " has no command."
-							return m, nil
-						}
-						m.running, m.output, m.cmdErr = true, "", ""
-						m.pendingTarget = m.runKey(d.Name, t.Name)
-						return m, runCmd(m.ctx, ec, t.LaunchMsg)
+						// Select the target so its result is shown and cached in place.
+						m = m.saveTargetOutput()
+						m.domainCursor, m.targetCursor = i, j
+						return m.startTarget(d.Name, t)
 					}
 				}
 			}
@@ -206,19 +208,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.confirmCmd = cmdSlice // await user confirmation before running
-			return m, nil
 		case "info":
-			m.output = payload
+			m.output, m.cmdErr, m.scrollOffset = payload, "", 0
 		}
 		return m, nil
 
 	case tea.KeyMsg:
 		// Input mode: capture all keystrokes for the AI prompt bar.
 		if m.inputMode {
-			switch msg.String() {
-			case "esc":
+			switch msg.Type {
+			case tea.KeyEsc:
 				m.inputMode, m.inputBuf = false, ""
-			case "enter":
+			case tea.KeyEnter:
 				if m.inputBuf != "" {
 					query := m.inputBuf
 					m.inputMode, m.inputBuf = false, ""
@@ -227,12 +228,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.llmCancel = cancel
 					return m, runLLMQuery(llmCtx, m.llmConfig, m.buildSystemPrompt(), query)
 				}
-			case "backspace", "ctrl+h":
+			case tea.KeyBackspace, tea.KeyCtrlH:
 				if r := []rune(m.inputBuf); len(r) > 0 {
 					m.inputBuf = string(r[:len(r)-1])
 				}
-			default:
-				if msg.Type == tea.KeyRunes && len([]rune(m.inputBuf)) < 500 {
+			case tea.KeyRunes, tea.KeySpace:
+				if len([]rune(m.inputBuf))+len(msg.Runes) <= maxInputRunes {
 					m.inputBuf += string(msg.Runes)
 				}
 			}
@@ -245,28 +246,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				cmd := m.confirmCmd
 				m.confirmCmd = nil
-				m.running, m.output, m.cmdErr = true, "", ""
-				return m, runCmd(m.ctx, cmd, "")
+				m = m.beginRun()
+				return m, runCmd(m.runCtx, cmd, "")
 			case "esc":
 				m.confirmCmd = nil
 				m.cmdErr = "AI command cancelled."
 			case "q", "ctrl+c":
-				if m.cancel != nil {
-					m.cancel()
-				}
-				m.quitting = true
-				return m, tea.Quit
+				return m.quit()
 			}
 			return m, nil
 		}
 
 		switch msg.String() {
 		case "q", "ctrl+c":
-			if m.cancel != nil {
-				m.cancel()
-			}
-			m.quitting = true
-			return m, tea.Quit
+			return m.quit()
 
 		case "?":
 			m.showHelp = !m.showHelp
@@ -292,27 +285,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
-			if m.llmPending {
-				if m.llmCancel != nil {
-					m.llmCancel()
-					m.llmCancel = nil
-				}
-				m.llmPending = false
-				m.cmdErr = "AI query cancelled."
+			// Cancel in-flight work. The cancelled command or query still reports
+			// back through its result message, which clears the running state.
+			if m.llmPending && m.llmCancel != nil {
+				m.llmCancel()
+			}
+			if m.running && m.runCancel != nil {
+				m.runCancel()
 			}
 
 		case " ":
 			if m.activePane == paneMiddle {
-				if m.domainCursor < len(m.domains) {
-					targets := m.domains[m.domainCursor].Targets
-					if m.targetCursor < len(targets) {
-						t := targets[m.targetCursor]
-						key := m.runKey(m.domains[m.domainCursor].Name, t.Name)
-						if m.selectedTargets[key] {
-							delete(m.selectedTargets, key)
-						} else {
-							m.selectedTargets[key] = true
-						}
+				if key, ok := m.currentKey(); ok {
+					if m.selectedTargets[key] {
+						delete(m.selectedTargets, key)
+					} else {
+						m.selectedTargets[key] = true
 					}
 				}
 			}
@@ -324,42 +312,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.allWorkspaces = workspaces
 				m.llmConfig = llmCfg
-				m.workspaceIdx = 0
-				if len(workspaces) > 0 {
-					m.domains = workspaces[0].Domains
-				} else {
-					m.domains = nil
-				}
-				m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
+				m = m.selectWorkspace(0)
 				m.targetOutputs = make(map[string]outputRecord)
-				m.selectedTargets = make(map[string]bool)
-				m.showHelp = false
 				m.output = fmt.Sprintf("Config reloaded — %d workspace(s) loaded.", len(workspaces))
 				m.cmdErr = ""
 			}
 
 		case "tab":
-			if len(m.allWorkspaces) > 1 {
-				m = m.saveTargetOutput()
-				m.workspaceIdx = (m.workspaceIdx + 1) % len(m.allWorkspaces)
-				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
-				m.domainCursor = 0
-				m.targetCursor = 0
-				m.selectedTargets = make(map[string]bool)
-				m = m.restoreTargetOutput()
-				m.showHelp = false
+			if n := len(m.allWorkspaces); n > 1 {
+				m = m.saveTargetOutput().selectWorkspace((m.workspaceIdx + 1) % n).restoreTargetOutput()
 			}
 
 		case "shift+tab":
-			if len(m.allWorkspaces) > 1 {
-				m = m.saveTargetOutput()
-				m.workspaceIdx = (m.workspaceIdx - 1 + len(m.allWorkspaces)) % len(m.allWorkspaces)
-				m.domains = m.allWorkspaces[m.workspaceIdx].Domains
-				m.domainCursor = 0
-				m.targetCursor = 0
-				m.selectedTargets = make(map[string]bool)
-				m = m.restoreTargetOutput()
-				m.showHelp = false
+			if n := len(m.allWorkspaces); n > 1 {
+				m = m.saveTargetOutput().selectWorkspace((m.workspaceIdx - 1 + n) % n).restoreTargetOutput()
 			}
 
 		case "enter":
@@ -369,66 +335,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Multi-select: run all selected targets in parallel.
 			if len(m.selectedTargets) > 0 {
+				m = m.beginRun()
 				var cmds []tea.Cmd
 				for key := range m.selectedTargets {
 					t, ok := m.findTargetByRunKey(key)
 					if !ok || len(t.Cmd) == 0 {
 						continue
 					}
-					cmds = append(cmds, runParallelCmd(m.ctx, key, t.Name, effectiveCmd(t), t.LaunchMsg))
+					cmds = append(cmds, runParallelCmd(m.runCtx, key, t.Name, effectiveCmd(t), t.LaunchMsg))
 				}
 				if len(cmds) == 0 {
+					m = m.finishRun()
 					m.cmdErr = "No executable targets selected."
 					return m, nil
 				}
 				m.multiRunPending = len(cmds)
 				m.parallelOutputs = make(map[string]string)
-				m.running = true
-				m.output = ""
-				m.cmdErr = ""
-				m.showHelp = false
 				m.selectedTargets = make(map[string]bool)
 				return m, tea.Batch(cmds...)
 			}
 
-			target, ok := m.currentTarget()
-			if !ok {
-				return m, nil
+			if target, ok := m.currentTarget(); ok {
+				return m.startTarget(m.domains[m.domainCursor].Name, target)
 			}
-
-			// Sequence target: run steps one by one in order.
-			if len(target.Sequence) > 0 {
-				steps := m.resolveSequenceTargets(target.Sequence)
-				if len(steps) == 0 || len(steps[0].Cmd) == 0 {
-					m.cmdErr = "Sequence has no executable steps."
-					return m, nil
-				}
-				if m.domainCursor < len(m.domains) {
-					m.pendingTarget = m.runKey(m.domains[m.domainCursor].Name, target.Name)
-				}
-				m.seqQueue = steps[1:]
-				m.seqOutput = ""
-				m.running = true
-				m.output = ""
-				m.cmdErr = ""
-				m.showHelp = false
-				return m, runCmd(m.ctx, effectiveCmd(steps[0]), steps[0].LaunchMsg)
-			}
-
-			// Normal single command.
-			if len(target.Cmd) == 0 {
-				m.output = ""
-				m.cmdErr = "No command configured for this target."
-				return m, nil
-			}
-			if m.domainCursor < len(m.domains) {
-				m.pendingTarget = m.runKey(m.domains[m.domainCursor].Name, target.Name)
-			}
-			m.running = true
-			m.output = ""
-			m.cmdErr = ""
-			m.showHelp = false
-			return m, runCmd(m.ctx, effectiveCmd(target), target.LaunchMsg)
 
 		case "left", "h":
 			if m.activePane > paneLeft {
@@ -444,18 +373,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.activePane {
 			case paneLeft:
 				if m.domainCursor > 0 {
-					m = m.saveTargetOutput()
-					m.domainCursor--
-					m.targetCursor = 0
-					m = m.restoreTargetOutput()
-					m.showHelp = false
+					m = m.moveCursor(m.domainCursor-1, 0)
 				}
 			case paneMiddle:
 				if m.targetCursor > 0 {
-					m = m.saveTargetOutput()
-					m.targetCursor--
-					m = m.restoreTargetOutput()
-					m.showHelp = false
+					m = m.moveCursor(m.domainCursor, m.targetCursor-1)
 				}
 			case paneRight:
 				if m.scrollOffset > 0 {
@@ -467,27 +389,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.activePane {
 			case paneLeft:
 				if m.domainCursor < len(m.domains)-1 {
-					m = m.saveTargetOutput()
-					m.domainCursor++
-					m.targetCursor = 0
-					m = m.restoreTargetOutput()
-					m.showHelp = false
+					m = m.moveCursor(m.domainCursor+1, 0)
 				}
 			case paneMiddle:
-				if m.domainCursor >= len(m.domains) {
-					break
-				}
-				targets := m.domains[m.domainCursor].Targets
-				if m.targetCursor < len(targets)-1 {
-					m = m.saveTargetOutput()
-					m.targetCursor++
-					m = m.restoreTargetOutput()
-					m.showHelp = false
+				if m.domainCursor < len(m.domains) && m.targetCursor < len(m.domains[m.domainCursor].Targets)-1 {
+					m = m.moveCursor(m.domainCursor, m.targetCursor+1)
 				}
 			case paneRight:
 				lineCount := strings.Count(m.output, "\n") + 1
-				pageSize := m.rightPanePageSize()
-				if m.scrollOffset < lineCount-pageSize {
+				if m.scrollOffset < lineCount-m.rightPanePageSize() {
 					m.scrollOffset++
 				}
 			}
@@ -496,6 +406,90 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// quit cancels all in-flight work and exits the program.
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.quitting = true
+	return m, tea.Quit
+}
+
+// moveCursor selects a new domain/target, caching the old target's output and
+// restoring the new one's.
+func (m Model) moveCursor(domain, target int) Model {
+	m = m.saveTargetOutput()
+	m.domainCursor, m.targetCursor = domain, target
+	m = m.restoreTargetOutput()
+	m.showHelp = false
+	return m
+}
+
+// selectWorkspace makes workspace i active and resets cursors and selection.
+func (m Model) selectWorkspace(i int) Model {
+	m.workspaceIdx = i
+	m.domains = nil
+	if i < len(m.allWorkspaces) {
+		m.domains = m.allWorkspaces[i].Domains
+	}
+	m.domainCursor, m.targetCursor, m.scrollOffset = 0, 0, 0
+	m.selectedTargets = make(map[string]bool)
+	m.showHelp = false
+	return m
+}
+
+// beginRun marks a run as started, clears the right pane, and creates the
+// cancellable context the run's commands execute under (Esc cancels it).
+func (m Model) beginRun() Model {
+	parent := m.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	m.runCtx, m.runCancel = context.WithCancel(parent)
+	m.running = true
+	m.output, m.cmdErr, m.scrollOffset = "", "", 0
+	m.showHelp = false
+	return m
+}
+
+// finishRun marks the current run as finished and releases its context.
+func (m Model) finishRun() Model {
+	if m.runCancel != nil {
+		m.runCancel()
+	}
+	m.running, m.runCtx, m.runCancel = false, nil, nil
+	return m
+}
+
+// startTarget runs target t (a single command or a sequence) from domain domainName.
+func (m Model) startTarget(domainName string, t Target) (Model, tea.Cmd) {
+	first := t
+	if len(t.Sequence) > 0 {
+		steps, err := m.resolveSequenceTargets(t.Sequence)
+		if err != nil {
+			m.output, m.cmdErr = "", err.Error()
+			return m, nil
+		}
+		first = steps[0]
+		m.seqQueue = steps[1:]
+		m.seqOutput = ""
+	}
+	cmd := effectiveCmd(first)
+	if len(cmd) == 0 {
+		m.seqQueue = nil
+		m.output = ""
+		if len(t.Sequence) > 0 {
+			m.cmdErr = fmt.Sprintf("Sequence step %q has no command.", first.Name)
+		} else {
+			m.cmdErr = "No command configured for this target."
+		}
+		return m, nil
+	}
+	m.pendingTarget = m.runKey(domainName, t.Name)
+	m = m.beginRun()
+	return m, runCmd(m.runCtx, cmd, first.LaunchMsg)
 }
 
 // currentTarget returns the currently selected target and whether it exists.
@@ -512,10 +506,22 @@ func (m Model) currentTarget() (Target, bool) {
 
 // effectiveCmd returns the command to run for a target, prepending ssh if Host is set.
 func effectiveCmd(t Target) []string {
-	if t.Host == "" {
+	if t.Host == "" || len(t.Cmd) == 0 {
 		return t.Cmd
 	}
 	return append([]string{"ssh", t.Host}, t.Cmd...)
+}
+
+// pollCmds returns the live-status probes relevant to the active workspace.
+func (m Model) pollCmds() []tea.Cmd {
+	var cmds []tea.Cmd
+	if m.hasDomain("Context/Git") {
+		cmds = append(cmds, pollGit(m.ctx))
+	}
+	if m.hasDomain("Infrastructure") {
+		cmds = append(cmds, pollDocker(m.ctx))
+	}
+	return cmds
 }
 
 // tickCmd schedules the next status poll cycle.
@@ -587,53 +593,66 @@ func pollDockerContainer(ctx context.Context, name string) tea.Cmd {
 	}
 }
 
+// cappedBuffer keeps the first limit bytes written to it and discards the rest,
+// so a runaway command cannot exhaust memory. Writes never fail, so the command
+// is not killed by a broken pipe once the cap is reached.
+type cappedBuffer struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if room := b.limit - b.buf.Len(); n > room {
+		p = p[:max(room, 0)]
+		b.truncated = true
+	}
+	b.buf.Write(p)
+	return n, nil
+}
+
+// execCapture runs cmd and returns its combined stdout/stderr, capped at
+// maxOutputBytes. launchMsg (or a generic note) replaces empty output on success.
+func execCapture(ctx context.Context, cmd []string, launchMsg string) (string, error) {
+	if len(cmd) == 0 {
+		return "", fmt.Errorf("no command to execute")
+	}
+	c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
+	out := &cappedBuffer{limit: maxOutputBytes}
+	c.Stdout, c.Stderr = out, out
+	// Don't hang on cancellation if a killed command left children holding the pipe.
+	c.WaitDelay = 2 * time.Second
+	err := c.Run()
+	if err != nil && ctx.Err() != nil {
+		err = errors.New("cancelled")
+	}
+	output := strings.TrimSpace(out.buf.String())
+	if out.truncated {
+		output += "\n…(output truncated at 1 MB)"
+	}
+	if output == "" && err == nil {
+		output = launchMsg
+		if output == "" {
+			output = "(command completed — no output)"
+		}
+	}
+	return output, err
+}
+
 // runCmd executes cmd asynchronously and returns the result as a cmdResultMsg.
-// ctx is used to cancel the command when the user quits.
 func runCmd(ctx context.Context, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
-		if len(cmd) == 0 {
-			return cmdResultMsg{err: fmt.Errorf("no command to execute")}
-		}
-		c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
-		out, err := c.CombinedOutput()
-		if len(out) > maxOutputBytes {
-			out = append(out[:maxOutputBytes], []byte("\n…(output truncated at 1 MB)")...)
-		}
-		output := strings.TrimSpace(string(out))
-		if output == "" && err == nil {
-			if launchMsg != "" {
-				output = launchMsg
-			} else {
-				output = "(command completed — no output)"
-			}
-		}
+		output, err := execCapture(ctx, cmd, launchMsg)
 		return cmdResultMsg{output: output, err: err}
 	}
 }
 
-// runParallelCmd executes a command and wraps the result as a parallelCmdResultMsg.
-// ctx is used to cancel the command when the user quits.
+// runParallelCmd executes cmd asynchronously and returns the result as a
+// parallelCmdResultMsg tagged with the target's runKey and display label.
 func runParallelCmd(ctx context.Context, key, label string, cmd []string, launchMsg string) tea.Cmd {
 	return func() tea.Msg {
-		if len(cmd) == 0 {
-			return parallelCmdResultMsg{key: key, label: label, err: fmt.Errorf("no command to execute")}
-		}
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
-		out, err := c.CombinedOutput()
-		if len(out) > maxOutputBytes {
-			out = append(out[:maxOutputBytes], []byte("\n…(output truncated at 1 MB)")...)
-		}
-		output := strings.TrimSpace(string(out))
-		if output == "" && err == nil {
-			if launchMsg != "" {
-				output = launchMsg
-			} else {
-				output = "(command completed — no output)"
-			}
-		}
+		output, err := execCapture(ctx, cmd, launchMsg)
 		return parallelCmdResultMsg{key: key, label: label, output: output, err: err}
 	}
 }

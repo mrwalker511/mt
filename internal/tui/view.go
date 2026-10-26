@@ -9,8 +9,9 @@ import (
 
 const (
 	statusBarHeight = 1
-	// Each pane: 1 left border + 1 right border + 1 left padding + 1 right padding
-	paneFrameWidth = 4
+	// Each pane: 1 left border + 1 right border. Padding is not counted here
+	// because lipgloss's Width() already includes it.
+	paneFrameWidth = 2
 	// Each pane: 1 top border + 1 bottom border
 	borderHeight = 2
 )
@@ -33,7 +34,7 @@ func (m Model) View() string {
 	if leftW < 14 {
 		leftW = 14
 	}
-	midW   := usable * 38 / 100
+	midW := usable * 38 / 100
 	rightW := usable - leftW - midW
 
 	contentH := m.height - statusBarHeight - borderHeight
@@ -58,6 +59,9 @@ func (m Model) View() string {
 		hint = "AI › run: " + strings.Join(m.confirmCmd, " ") + "   [Enter] confirm · [Esc] cancel"
 	default:
 		hint = "[↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [/] AI  [y] Copy  [S] Save  [c] Clear  [?] Help  [R] Reload  [q] Quit"
+		if m.running {
+			hint = "Running…   [Esc] cancel  ·  " + hint
+		}
 		if len(m.allWorkspaces) > 1 {
 			hint += "  [tab] Workspace"
 		}
@@ -65,7 +69,9 @@ func (m Model) View() string {
 			hint += "  [j/k] Scroll"
 		}
 	}
-	bar := statusBarStyle.Width(m.width).Render(hint)
+	// MaxHeight keeps the bar to one line on narrow terminals; a wrapped bar would
+	// push the frame past the terminal height.
+	bar := statusBarStyle.Width(m.width).MaxHeight(1).Render(hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, body, bar)
 }
@@ -78,26 +84,23 @@ func (m Model) renderLeftPane(w, h int) string {
 	}
 	title := titleStyle.Render(titleText)
 	items := m.renderList(m.domainNames(), m.domainCursor, focused)
-	content := lipgloss.JoinVertical(lipgloss.Left, title, items)
-	return paneStyle(focused).Width(w).Height(h).Render(content)
+	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, items))
 }
 
 func (m Model) renderMiddlePane(w, h int) string {
 	focused := m.activePane == paneMiddle
-	title   := titleStyle.Render("TARGETS & ACTIONS")
-	names   := m.targetNamesWithBadges()
-	items   := m.renderList(names, m.targetCursor, focused)
-	content := lipgloss.JoinVertical(lipgloss.Left, title, items)
-	return paneStyle(focused).Width(w).Height(h).Render(content)
+	title := titleStyle.Render("TARGETS & ACTIONS")
+	names := m.targetNamesWithBadges()
+	items := m.renderList(names, m.targetCursor, focused)
+	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, items))
 }
 
 func (m Model) renderRightPane(w, h int) string {
 	focused := m.activePane == paneRight
-	title   := titleStyle.Render("LIVE STATUS / INFO")
+	title := titleStyle.Render("LIVE STATUS / INFO")
 
 	if m.showHelp {
-		content := lipgloss.JoinVertical(lipgloss.Left, title, m.renderHelp())
-		return paneStyle(focused).Width(w).Height(h).Render(content)
+		return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, m.renderHelp()))
 	}
 
 	var text string
@@ -128,8 +131,18 @@ func (m Model) renderRightPane(w, h int) string {
 		parts = append(parts, header, "")
 	}
 	parts = append(parts, text)
-	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
-	return paneStyle(focused).Width(w).Height(h).Render(content)
+	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, parts...))
+}
+
+// renderPane draws content in a bordered pane of w×h, cutting off lines that
+// would not fit (after wrapping) so the pane never grows past the terminal.
+func renderPane(focused bool, w, h int, content string) string {
+	style := paneStyle(focused).Width(w).Height(h)
+	wrapped := lipgloss.NewStyle().Width(w - style.GetHorizontalPadding()).Render(content)
+	if lines := strings.Split(wrapped, "\n"); len(lines) > h {
+		wrapped = strings.Join(lines[:h], "\n")
+	}
+	return style.Render(wrapped)
 }
 
 // renderHelp builds the keybinding reference displayed when showHelp is true.
@@ -147,6 +160,8 @@ func (m Model) renderHelp() string {
 		normalItemStyle.Render("  y            Copy output to clipboard"),
 		normalItemStyle.Render("  S            Save output to ~/.mt/logs/"),
 		normalItemStyle.Render("  c            Clear output"),
+		normalItemStyle.Render("  Esc          Cancel running command / AI query"),
+		normalItemStyle.Render("  R            Reload config file"),
 	}
 	if len(m.allWorkspaces) > 1 {
 		lines = append(lines,
@@ -162,9 +177,12 @@ func (m Model) renderHelp() string {
 	if t, ok := m.currentTarget(); ok {
 		lines = append(lines, "", dimItemStyle.Render("Current target"))
 		lines = append(lines, normalItemStyle.Render("  "+t.Name))
-		if len(t.Cmd) > 0 {
-			lines = append(lines, dimItemStyle.Render("  $ "+strings.Join(t.Cmd, " ")))
-		} else {
+		switch {
+		case len(t.Sequence) > 0:
+			lines = append(lines, dimItemStyle.Render("  sequence: "+strings.Join(t.Sequence, " → ")))
+		case len(t.Cmd) > 0:
+			lines = append(lines, dimItemStyle.Render("  $ "+strings.Join(effectiveCmd(t), " ")))
+		default:
 			lines = append(lines, dimItemStyle.Render("  (no command configured)"))
 		}
 	}
@@ -276,15 +294,10 @@ func (m Model) renderScrollableOutput(output string) string {
 	if len(lines) <= pageSize {
 		return normalItemStyle.Render(output)
 	}
-	offset := m.scrollOffset
-	if offset < 0 {
-		offset = 0
-	}
-	end := offset + pageSize
-	if end > len(lines) {
-		end = len(lines)
-	}
-	visible := strings.Join(lines[offset:end], "\n")
+	// Clamp so a stale offset (output replaced, window resized) can never index
+	// past the end of lines.
+	offset := min(max(m.scrollOffset, 0), len(lines)-pageSize)
+	visible := strings.Join(lines[offset:offset+pageSize], "\n")
 	var sb strings.Builder
 	sb.WriteString(normalItemStyle.Render(visible))
 	sb.WriteString("\n")

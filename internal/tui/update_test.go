@@ -478,6 +478,7 @@ func TestUpdate_Badge_SetOnSuccess(t *testing.T) {
 		pendingTarget: "Domain/Target",
 		liveStatus:    make(map[string]string),
 		runStates:     make(map[string]runResult),
+		targetOutputs: make(map[string]outputRecord),
 	}
 	m = send(m, cmdResultMsg{output: "ok"})
 	if m.runStates["Domain/Target"] != runSuccess {
@@ -491,6 +492,7 @@ func TestUpdate_Badge_SetOnFailure(t *testing.T) {
 		pendingTarget: "Domain/Target",
 		liveStatus:    make(map[string]string),
 		runStates:     make(map[string]runResult),
+		targetOutputs: make(map[string]outputRecord),
 	}
 	m = send(m, cmdResultMsg{output: "", err: errors.New("exit 1")})
 	if m.runStates["Domain/Target"] != runFailure {
@@ -504,6 +506,7 @@ func TestUpdate_Badge_PendingTargetCleared(t *testing.T) {
 		pendingTarget: "Domain/Target",
 		liveStatus:    make(map[string]string),
 		runStates:     make(map[string]runResult),
+		targetOutputs: make(map[string]outputRecord),
 	}
 	m = send(m, cmdResultMsg{output: "done"})
 	if m.pendingTarget != "" {
@@ -629,8 +632,8 @@ func TestHasGitDomain_True(t *testing.T) {
 			{Name: "Context/Git"},
 		},
 	}
-	if !m.hasGitDomain() {
-		t.Error("expected hasGitDomain=true when Context/Git domain is present")
+	if !m.hasDomain("Context/Git") {
+		t.Error("expected hasDomain=true when Context/Git domain is present")
 	}
 }
 
@@ -641,8 +644,8 @@ func TestHasDockerDomain_False(t *testing.T) {
 			{Name: "Context/Git"},
 		},
 	}
-	if m.hasDockerDomain() {
-		t.Error("expected hasDockerDomain=false when no Infrastructure domain")
+	if m.hasDomain("Infrastructure") {
+		t.Error("expected hasDomain=false when no Infrastructure domain")
 	}
 }
 
@@ -715,7 +718,7 @@ func TestUpdate_ScrollOffset_ResetOnNewOutput(t *testing.T) {
 	m.targetOutputs = make(map[string]outputRecord)
 	m.runStates = make(map[string]runResult)
 	m.scrollOffset = 10
-	m.pendingTarget = "some/target"
+	m.pendingTarget = m.runKey("Domain A", "T1")
 	m = send(m, cmdResultMsg{output: "fresh output", err: nil})
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0 after cmdResultMsg, got %d", m.scrollOffset)
@@ -936,7 +939,7 @@ func TestModel_ResolveSequenceTargets(t *testing.T) {
 	m := testModel()
 	m.selectedTargets = make(map[string]bool)
 
-	steps := m.resolveSequenceTargets([]string{"T3", "T1"})
+	steps, _ := m.resolveSequenceTargets([]string{"T3", "T1"})
 	if len(steps) != 2 {
 		t.Fatalf("got %d steps, want 2", len(steps))
 	}
@@ -945,13 +948,13 @@ func TestModel_ResolveSequenceTargets(t *testing.T) {
 	}
 }
 
-func TestModel_ResolveSequenceTargets_SkipsMissing(t *testing.T) {
+func TestModel_ResolveSequenceTargets_MissingIsError(t *testing.T) {
 	m := testModel()
 	m.selectedTargets = make(map[string]bool)
 
-	steps := m.resolveSequenceTargets([]string{"T1", "NonExistent"})
-	if len(steps) != 1 || steps[0].Name != "T1" {
-		t.Errorf("expected [T1], got %v", steps)
+	steps, err := m.resolveSequenceTargets([]string{"T1", "NonExistent"})
+	if err == nil || !strings.Contains(err.Error(), "NonExistent") {
+		t.Errorf("expected error naming the missing step, got steps=%v err=%v", steps, err)
 	}
 }
 
@@ -1256,15 +1259,15 @@ func TestUpdate_LLMResponse_ErrorShowsInCmdErr(t *testing.T) {
 	}
 }
 
-func TestUpdate_LLMResponse_CancelledIgnored(t *testing.T) {
+func TestUpdate_LLMResponse_CancelledShowsNotice(t *testing.T) {
 	m := testModel()
 	m.llmPending = true
 	next := send(m, llmResponseMsg{err: context.Canceled})
 	if next.llmPending {
 		t.Error("expected llmPending=false after cancellation")
 	}
-	if next.cmdErr != "" {
-		t.Errorf("expected no cmdErr for cancelled request, got %q", next.cmdErr)
+	if next.cmdErr != "AI query cancelled." {
+		t.Errorf("expected cancellation notice, got %q", next.cmdErr)
 	}
 }
 

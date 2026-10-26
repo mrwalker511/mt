@@ -51,42 +51,38 @@ func expandDomain(dc domainConfig) Domain {
 // LoadWorkspaces reads the first config file found in the search path and returns
 // the workspaces and LLM config defined there. Falls back to defaultWorkspaces if
 // no file exists. Returns an error (and defaultWorkspaces) if a file is found but
-// cannot be parsed. Files may declare include: paths to merge domains/workspaces.
+// is invalid, including when one of its include: files is missing.
 func LoadWorkspaces() ([]Workspace, llm.Config, error) {
 	for _, p := range configPaths() {
-		cfg, err := resolveConfig(p, make(map[string]bool))
-		if errors.Is(err, os.ErrNotExist) {
+		// Only a missing top-level file moves on to the next candidate. Checking
+		// here, rather than the error from resolveConfig, keeps a missing include
+		// from silently discarding the whole config.
+		if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
 			continue
 		}
+		cfg, err := resolveConfig(p, make(map[string]bool))
 		if err != nil {
 			return defaultWorkspaces, llm.Config{}, err
 		}
-		if len(cfg.Workspaces) > 0 {
-			workspaces := make([]Workspace, len(cfg.Workspaces))
-			for i, wc := range cfg.Workspaces {
-				domains := make([]Domain, len(wc.Domains))
-				for j, dc := range wc.Domains {
-					domains[j] = expandDomain(dc)
-				}
-				workspaces[i] = Workspace{Name: wc.Name, Domains: domains}
-			}
-			if err := validateWorkspaces(workspaces); err != nil {
-				return defaultWorkspaces, llm.Config{}, err
-			}
-			return workspaces, cfg.LLM, nil
+		wcs := cfg.Workspaces
+		if len(wcs) == 0 && len(cfg.Domains) > 0 {
+			wcs = []workspaceConfig{{Domains: cfg.Domains}}
 		}
-		if len(cfg.Domains) > 0 {
-			domains := make([]Domain, len(cfg.Domains))
-			for i, dc := range cfg.Domains {
-				domains[i] = expandDomain(dc)
-			}
-			ws := []Workspace{{Domains: domains}}
-			if err := validateWorkspaces(ws); err != nil {
-				return defaultWorkspaces, llm.Config{}, err
-			}
-			return ws, cfg.LLM, nil
+		if len(wcs) == 0 {
+			return defaultWorkspaces, llm.Config{}, fmt.Errorf("%s: no domains or workspaces defined", p)
 		}
-		return defaultWorkspaces, llm.Config{}, fmt.Errorf("%s: no domains or workspaces defined", p)
+		workspaces := make([]Workspace, len(wcs))
+		for i, wc := range wcs {
+			domains := make([]Domain, len(wc.Domains))
+			for j, dc := range wc.Domains {
+				domains[j] = expandDomain(dc)
+			}
+			workspaces[i] = Workspace{Name: wc.Name, Domains: domains}
+		}
+		if err := validateWorkspaces(workspaces); err != nil {
+			return defaultWorkspaces, llm.Config{}, err
+		}
+		return workspaces, cfg.LLM, nil
 	}
 	return defaultWorkspaces, llm.Config{}, nil
 }
@@ -127,6 +123,9 @@ func resolveConfig(path string, visited map[string]bool) (fileConfig, error) {
 	}
 	dir := filepath.Dir(absPath)
 	for _, inc := range cfg.Include {
+		if rest, ok := strings.CutPrefix(inc, "~/"); ok {
+			inc = filepath.Join(home, rest)
+		}
 		if !filepath.IsAbs(inc) {
 			inc = filepath.Join(dir, inc)
 		}

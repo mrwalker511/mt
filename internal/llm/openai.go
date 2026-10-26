@@ -8,20 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
 
-const (
-	DefaultOpenAIBaseURL   = "https://api.openai.com"
-	DefaultOpenAIModel     = "gpt-4o-mini"
-	DefaultLiteLLMBaseURL  = "http://localhost:4000"
-	DefaultLlamaCppBaseURL = "http://localhost:8080"
-	DefaultMLXBaseURL      = "http://localhost:8000"
-
-	maxResponseBytes = 1 << 20 // 1 MB — ample for any chat completion
-)
+const maxResponseBytes = 1 << 20 // 1 MB — ample for any chat completion
 
 // llmHTTPClient caps stalled TCP handshakes that context cancellation cannot reach.
 // 35s > the 30s context timeout used at call sites, so the context fires first
@@ -34,7 +25,7 @@ type openAIMessage struct {
 }
 
 type openAIRequest struct {
-	Model    string          `json:"model"`
+	Model    string          `json:"model,omitempty"` // omitted when unset so local servers use their loaded model
 	Messages []openAIMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
 }
@@ -55,6 +46,7 @@ type openAIError struct {
 // generateOpenAICompat posts to any OpenAI-compatible /v1/chat/completions endpoint.
 // apiKey is sent as a Bearer token only when non-empty.
 func generateOpenAICompat(ctx context.Context, baseURL, model, apiKey, systemPrompt, userMessage string) (string, error) {
+	baseURL = strings.TrimRight(baseURL, "/")
 	if _, err := url.ParseRequestURI(baseURL); err != nil {
 		return "", fmt.Errorf("invalid base_url %q: %w", baseURL, err)
 	}
@@ -102,63 +94,4 @@ func generateOpenAICompat(ctx context.Context, baseURL, model, apiKey, systemPro
 		return "", fmt.Errorf("empty response")
 	}
 	return strings.TrimSpace(result.Choices[0].Message.Content), nil
-}
-
-func generateOpenAI(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
-	apiKey := cfg.APIKey
-	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
-	}
-	if apiKey == "" {
-		return "", fmt.Errorf("openai: no API key — set api_key in config or OPENAI_API_KEY env var")
-	}
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = DefaultOpenAIBaseURL
-	}
-	model := cfg.Model
-	if model == "" {
-		model = DefaultOpenAIModel
-	}
-	result, err := generateOpenAICompat(ctx, baseURL, model, apiKey, systemPrompt, userMessage)
-	if err != nil {
-		return "", fmt.Errorf("openai: %w", err)
-	}
-	return result, nil
-}
-
-func generateLiteLLM(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = DefaultLiteLLMBaseURL
-	}
-	result, err := generateOpenAICompat(ctx, baseURL, cfg.Model, cfg.APIKey, systemPrompt, userMessage)
-	if err != nil {
-		return "", fmt.Errorf("litellm: %w", err)
-	}
-	return result, nil
-}
-
-func generateLlamaCpp(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = DefaultLlamaCppBaseURL
-	}
-	result, err := generateOpenAICompat(ctx, baseURL, cfg.Model, cfg.APIKey, systemPrompt, userMessage)
-	if err != nil {
-		return "", fmt.Errorf("llamacpp: %w", err)
-	}
-	return result, nil
-}
-
-func generateMLX(ctx context.Context, cfg Config, systemPrompt, userMessage string) (string, error) {
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = DefaultMLXBaseURL
-	}
-	result, err := generateOpenAICompat(ctx, baseURL, cfg.Model, cfg.APIKey, systemPrompt, userMessage)
-	if err != nil {
-		return "", fmt.Errorf("mlx: %w", err)
-	}
-	return result, nil
 }

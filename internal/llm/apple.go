@@ -37,6 +37,9 @@ func generateApple(ctx context.Context, cfg Config, systemPrompt, userMessage st
 	cmd.Stderr = &errBuf
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		if errBuf.Len() > 0 {
 			return "", fmt.Errorf("apple: %s", strings.TrimSpace(errBuf.String()))
 		}

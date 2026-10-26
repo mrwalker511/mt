@@ -4,6 +4,8 @@ A keyboard-driven terminal workspace launcher. Navigate domains and targets in a
 
 ## Install
 
+Requires Go 1.25 or later.
+
 ```sh
 go install github.com/mrwalker511/mt@latest
 ```
@@ -34,6 +36,8 @@ mt
 | `S` | Save right-pane output to `~/.mt/logs/mt-TIMESTAMP.txt` |
 | `c` | Clear right-pane output |
 | `R` | Reload config file without restarting |
+| `/` | Open the AI prompt bar |
+| `Esc` | Stop the running command(s), cancel an AI request, or close the prompt bar |
 | `?` | Toggle help overlay |
 | `Tab` / `Shift+Tab` | Switch workspace (when multiple workspaces configured) |
 | `q` / `Ctrl+C` | Quit (cancels any running commands) |
@@ -42,11 +46,21 @@ mt
 
 Press `/` to open a natural-language prompt bar. Describe what you want in plain English and press `Enter`. The assistant maps your request to one of three actions:
 
-- **Run a target** — executes an existing target by name
-- **Generate a command** — proposes a new command (you must press `Enter` to confirm before it runs)
-- **Answer a question** — replies inline in ≤ 2 sentences
+- **Run a target**: selects and runs an existing target by name (sequences included)
+- **Generate a command**: proposes a new command; nothing runs until you press `Enter` to confirm (`Esc` rejects it)
+- **Answer a question**: replies inline in 2 sentences or fewer
 
-Press `Esc` to cancel at any time.
+The model sees the names and first status line of every target in the current workspace, plus the current time. Requests time out after 30 seconds; press `Esc` to cancel sooner.
+
+| `provider:` | Default endpoint | Notes |
+|---|---|---|
+| `litellm` (default) | `http://localhost:4000` | LiteLLM proxy in front of any backend |
+| `llamacpp` | `http://localhost:8080` | `llama-server`; also any other OpenAI-compatible server via `base_url` (e.g. Ollama at `http://localhost:11434`, with `model:` set) |
+| `mlx` | `http://localhost:8000` | `mlx_lm.server` on Apple Silicon |
+| `openai` | `https://api.openai.com` | Needs `api_key` or `OPENAI_API_KEY`; model defaults to `gpt-4o-mini` |
+| `apple` | (local binary) | On-device Foundation Models via `mt-apple-bridge`, macOS 26+ |
+
+`base_url` must not include `/v1` (mt appends `/v1/chat/completions`). Set `debug: true` under `llm:` to log every request and response to `~/.mt/logs/debug.log`.
 
 ### On-device: Apple Foundation Models (macOS 26+)
 
@@ -138,7 +152,7 @@ domains:
 
 ```yaml
 include:
-  - ~/shared/team-tools.yaml  # must resolve within $HOME
+  - ~/shared/team-tools.yaml  # ~/ expands to $HOME; must resolve within $HOME
 
 domains:
   - name: "Personal"
@@ -146,6 +160,8 @@ domains:
       - name: "Check Mail"
         cmd: ["open", "-a", "Mail"]
 ```
+
+Relative include paths resolve from the including file's directory. A missing or invalid include is reported as a config error (mt then falls back to the built-in defaults) rather than silently skipped.
 
 **Mac app shorthand:** Use `apps:` to add launchers without writing the full command:
 
@@ -239,16 +255,19 @@ llama-server -m ~/models/mistral-7b-instruct.Q4_K_M.gguf \
 | `--ctx-size 8192` | 36 GB of unified memory fits large contexts; raise to `16384` for large models |
 | `--threads 10` | Matches M5 Max's 10 performance cores |
 
-Model size guide for 36 GB unified memory: Q4_K_M fits 70B models; Q8_0 fits ~34B; F16 fits ~17B.
+Model size guide for 36 GB unified memory: by default macOS lets the GPU use roughly 70–75% of RAM (about 26 GB here). Q4_K_M weighs about 0.6 GB per billion parameters, so ~30B-class models fit with room for context; 70B models do not. Q8_0 weighs about 1.1 GB per billion parameters, so stay at ~20B or below.
 
 ## Security
 
-`mt` runs commands exactly as written in your config — no shell expansion. Protections applied at config load time:
+Your config is the trust boundary: anyone who can write it can run commands as you. `mt` runs local commands exactly as written, as argument arrays with no shell expansion. SSH targets are the exception, because `ssh` hands the command to the remote shell. Protections:
 
-- Config files with world-writable permissions are rejected
+- Config files (and includes) with world-writable permissions are rejected
 - `include:` paths must resolve within `$HOME` (symlinks checked)
 - SSH `host:` values are validated against `[a-zA-Z0-9][a-zA-Z0-9._@%-]*` to block option injection
-- Command output is bounded to 1 MB; per-target cache is bounded to 256 KB
+- AI-generated commands never run without your explicit `Enter`
+- Command output is capped at 1 MB as it is read; per-target cache is bounded to 256 KB
+
+A `./mt.yaml` in the current directory overrides your user config, so only run `mt` in directories you trust.
 
 ## Development
 
@@ -259,4 +278,17 @@ make build   # compile
 make clean   # remove binary
 ```
 
-CI runs on every push via GitHub Actions (`.github/workflows/ci.yml`).
+CI runs on every push and pull request via GitHub Actions (`.github/workflows/ci.yml`): vet + test on Linux, a Linux build, and a macOS job that also builds the Apple bridge. See [`docs/ci.html`](docs/ci.html).
+
+### Project layout
+
+| Path | Purpose |
+|---|---|
+| `main.go` | Entry point: starts the Bubble Tea program |
+| `internal/tui/model.go` | `Model` state, message types, per-target output cache helpers |
+| `internal/tui/update.go` | Key handling, command execution, sequences, parallel runs, live-status polling, AI prompt handling |
+| `internal/tui/view.go`, `styles.go` | Three-pane rendering and colours |
+| `internal/tui/config.go` | Config discovery, YAML parsing, `include:` resolution, `apps:` expansion |
+| `internal/tui/data.go` | `Workspace`/`Domain`/`Target` types and the built-in default targets |
+| `internal/llm/` | Provider dispatch (`llm.go`), OpenAI-compatible HTTP client (`openai.go`), Apple bridge client (`apple.go`) |
+| `cmd/apple-llm/` | Swift source and entitlements for `mt-apple-bridge` |
