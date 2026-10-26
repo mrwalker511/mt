@@ -235,6 +235,7 @@
     }
     .job-test  { background: rgba(124,158,248,.18); color: var(--accent); }
     .job-build { background: rgba(86,196,168,.18);  color: var(--accent2); }
+    .job-macos { background: rgba(200,160,90,.18);  color: var(--text); }
   </style>
 </head>
 <body>
@@ -256,7 +257,8 @@
       <ul>
         <li><a href="#job-test">test job</a></li>
         <li><a href="#job-build">build job</a></li>
-        <li><a href="#why-separate">Why two separate jobs</a></li>
+        <li><a href="#job-macos">macos job</a></li>
+        <li><a href="#why-separate">Why separate jobs</a></li>
       </ul>
     </li>
     <li><a href="#steps">Step reference</a>
@@ -283,7 +285,7 @@
 
 <!-- ── Overview ─────────────────────────────────────────────────────── -->
 <h2 id="overview">Overview <a class="anchor" href="#overview">#</a></h2>
-<p><code>mt</code> uses a single GitHub Actions workflow file, <code>.github/workflows/ci.yml</code>, that runs automatically on every push and every pull request. It executes two parallel jobs — <span class="job-badge job-test">test</span> and <span class="job-badge job-build">build</span> — giving fast feedback on both code correctness and compilation.</p>
+<p><code>mt</code> uses a single GitHub Actions workflow file, <code>.github/workflows/ci.yml</code>, that runs automatically on every push and every pull request. It executes three parallel jobs — <span class="job-badge job-test">test</span>, <span class="job-badge job-build">build</span> and <span class="job-badge job-macos">macos</span> — giving fast feedback on code correctness, compilation, and the macOS-only Apple bridge.</p>
 
 <p>The workflow is intentionally minimal: no deployment, no release automation, no matrix builds. Its only job is to catch regressions before they land on <code>main</code>.</p>
 
@@ -306,7 +308,7 @@
 
 <h3 id="trigger-pr">On pull request</h3>
 <p>The bare <code>pull_request:</code> trigger fires on the following PR events by default: <code>opened</code>, <code>synchronize</code> (new commit pushed to a PR branch), and <code>reopened</code>. No branch filter is applied, so it covers PRs targeting any base branch.</p>
-<p><strong>Why:</strong> GitHub uses the PR check run results to gate merges. Branch protection rules can require the <span class="job-badge job-test">test</span> and <span class="job-badge job-build">build</span> checks to pass before a PR is mergeable. The <code>pull_request</code> trigger is what populates those required status checks.</p>
+<p><strong>Why:</strong> GitHub uses the PR check run results to gate merges. Branch protection rules can require the <span class="job-badge job-test">test</span>, <span class="job-badge job-build">build</span> and <span class="job-badge job-macos">macos</span> checks to pass before a PR is mergeable. The <code>pull_request</code> trigger is what populates those required status checks.</p>
 
 <div class="callout">
   <strong>Push + PR: is CI run twice?</strong>
@@ -315,7 +317,7 @@
 
 <!-- ── Jobs ───────────────────────────────────────────────────────────── -->
 <h2 id="jobs">Jobs <a class="anchor" href="#jobs">#</a></h2>
-<p>The workflow defines two independent jobs that run in parallel on separate runners:</p>
+<p>The workflow defines three independent jobs that run in parallel on separate runners:</p>
 
 <table>
   <thead><tr><th>Job</th><th>Runner</th><th>Steps</th><th>Purpose</th></tr></thead>
@@ -331,6 +333,12 @@
       <td><code>ubuntu-latest</code></td>
       <td>checkout → setup-go → <code>go build</code></td>
       <td>Verify the binary compiles cleanly from a clean checkout</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-macos">macos</span></td>
+      <td><code>macos-latest</code></td>
+      <td>checkout → setup-go → <code>go vet</code> → <code>go test</code> → <code>go build</code> → <code>make apple-bridge</code></td>
+      <td>Run the full suite on the platform most users run <code>mt</code> on, and compile + ad-hoc sign the Swift bridge</td>
     </tr>
   </tbody>
 </table>
@@ -401,8 +409,12 @@
   </div>
 </div>
 
-<h3 id="why-separate">Why two separate jobs?</h3>
-<p>Running <code>test</code> and <code>build</code> as independent jobs (not sequential steps in one job) has two concrete benefits:</p>
+<h3 id="job-macos">macos job</h3>
+<p>Repeats vet, test and build on <code>macos-latest</code>, then runs <code>make apple-bridge</code>. That target compiles <code>cmd/apple-llm/main.swift</code> with <code>swiftc</code> and ad-hoc signs it with the FoundationModels entitlement. The Swift source is wrapped in <code>#if canImport(FoundationModels)</code>, so it still compiles (to a stub that prints an error) on runner images whose SDK predates macOS 26. A green job therefore proves the bridge <em>builds</em>; it does not exercise on-device inference.</p>
+<p>macOS matters because several code paths only run there: <code>pbcopy</code> for the clipboard, <code>open -a</code> in the default targets, and the bridge itself.</p>
+
+<h3 id="why-separate">Why separate jobs?</h3>
+<p>Running the jobs independently (not as sequential steps in one job) has two concrete benefits:</p>
 <ol>
   <li><strong>Parallelism.</strong> Both jobs start at the same time on separate runners. Total wall-clock CI time is determined by whichever finishes last, not their sum. On a cold runner this saves roughly 30–60 seconds per run.</li>
   <li><strong>Distinct failure signals.</strong> If <code>test</code> fails and <code>build</code> passes, you know the tests themselves are broken, not compilation. If <code>build</code> fails but <code>test</code> passes, something in <code>main.go</code> or a non-test file has a compile error that tests did not exercise. The two signals are meaningfully different.</li>
@@ -418,7 +430,7 @@
 
 <h3 id="step-checkout">actions/checkout@v4</h3>
 <p>Provided by GitHub. Clones the repository into <code>/home/runner/work/mt/mt</code> at the SHA that triggered the workflow. For push events this is the pushed commit; for pull requests it is the merge commit of the PR head into the base branch.</p>
-<p><strong>Why v4:</strong> Version 4 uses sparse checkouts by default and supports Git 2.18+ features. It is the current stable release and the one most Actions documentation refers to.</p>
+<p>By default it makes a shallow clone (<code>fetch-depth: 1</code>), which is all a build needs.</p>
 
 <h3 id="step-setup-go">actions/setup-go@v5</h3>
 <pre><code>- uses: actions/setup-go@v5
@@ -432,7 +444,7 @@
     <tr>
       <td><code>go-version-file</code></td>
       <td><code>go.mod</code></td>
-      <td>Reads the <code>go</code> directive from <code>go.mod</code> to pick the exact toolchain version — currently Go 1.24.7. No hardcoded version string in the workflow file; the workflow automatically tracks <code>go.mod</code> changes.</td>
+      <td>Reads the <code>go</code> directive from <code>go.mod</code> to pick the exact toolchain version — currently Go 1.25.0. No hardcoded version string in the workflow file; the workflow automatically tracks <code>go.mod</code> changes.</td>
     </tr>
     <tr>
       <td><code>cache</code></td>
@@ -484,18 +496,18 @@
 <!-- ── Go version management ──────────────────────────────────────────── -->
 <h2 id="go-version">Go version management <a class="anchor" href="#go-version">#</a></h2>
 <p>The Go version used by CI is determined entirely by the <code>go</code> directive in <code>go.mod</code>:</p>
-<pre><code>go 1.24.7</code></pre>
-<p>Because both jobs set <code>go-version-file: go.mod</code>, updating the minimum Go version in <code>go.mod</code> automatically changes the version used in CI on the next push — no workflow file edit needed.</p>
+<pre><code>go 1.25.0</code></pre>
+<p>Because every job sets <code>go-version-file: go.mod</code>, updating the minimum Go version in <code>go.mod</code> automatically changes the version used in CI on the next push — no workflow file edit needed.</p>
 
 <div class="callout warn">
   <strong>Minimum vs. exact version</strong>
-  The <code>go</code> directive in <code>go.mod</code> sets the <em>minimum</em> language version required by the module. <code>actions/setup-go</code> interprets this as the exact version to install. If the directive says <code>go 1.24.7</code>, CI will install Go 1.24.7 specifically. To allow any patch release of 1.24, you would write <code>go 1.24</code> (without a patch version).
+  The <code>go</code> directive in <code>go.mod</code> sets the <em>minimum</em> language version required by the module. <code>actions/setup-go</code> interprets this as the exact version to install. If the directive says <code>go 1.25.0</code>, CI will install Go 1.25.0 specifically.
 </div>
 
 <p>To upgrade Go locally and in CI at the same time:</p>
-<pre><code>go mod edit -go 1.25.0
+<pre><code>go mod edit -go 1.26.0
 go mod tidy
-git commit go.mod go.sum -m "chore: upgrade to Go 1.25.0"</code></pre>
+git commit go.mod go.sum -m "chore: upgrade to Go 1.26.0"</code></pre>
 
 <!-- ── Dependency caching ──────────────────────────────────────────────── -->
 <h2 id="caching">Dependency caching <a class="anchor" href="#caching">#</a></h2>
@@ -531,7 +543,7 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.25.0"</code></pre>
 <p>After a push or PR event, CI results appear in two places:</p>
 
 <h3>On a pull request</h3>
-<p>The PR page shows a status checks section near the merge button. Each job (<span class="job-badge job-test">test</span> and <span class="job-badge job-build">build</span>) appears as a separate check. Click <strong>Details</strong> next to any check to open the full job log.</p>
+<p>The PR page shows a status checks section near the merge button. Each job (<span class="job-badge job-test">test</span>, <span class="job-badge job-build">build</span> and <span class="job-badge job-macos">macos</span>) appears as a separate check. Click <strong>Details</strong> next to any check to open the full job log.</p>
 
 <h3>On a commit or branch</h3>
 <p>Navigate to <strong>Actions</strong> in the repository sidebar, or click the coloured dot next to a commit SHA. Green circle = all jobs passed. Red X = at least one job failed. Yellow dot = jobs in progress.</p>
@@ -556,7 +568,17 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.25.0"</code></pre>
       <td>The <code>main</code> package or one of its dependencies has a compile error not caught by tests. Run <code>go build -o /dev/null .</code> locally.</td>
     </tr>
     <tr>
-      <td>Either</td>
+      <td><span class="job-badge job-macos">macos</span></td>
+      <td><code>apple-bridge</code></td>
+      <td><code>swiftc</code> rejected <code>cmd/apple-llm/main.swift</code> or <code>codesign</code> failed. Run <code>make apple-bridge</code> on a Mac with the Xcode command-line tools.</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-macos">macos</span></td>
+      <td><code>test</code></td>
+      <td>Passes on Linux but fails on macOS: usually a path difference (e.g. <code>/var</code> → <code>/private/var</code> symlinks in temp dirs).</td>
+    </tr>
+    <tr>
+      <td>Any</td>
       <td><code>setup-go</code></td>
       <td>The Go version in <code>go.mod</code> is not yet available on GitHub-hosted runners (rare). Check the <code>actions/setup-go</code> release notes.</td>
     </tr>
@@ -622,7 +644,7 @@ jobs:
 
 <!-- ── Local parity ────────────────────────────────────────────────────── -->
 <h2 id="local-parity">Local parity <a class="anchor" href="#local-parity">#</a></h2>
-<p>The CI steps map exactly to the <code>Makefile</code> targets. Running <code>make all</code> locally executes the same commands in the same order:</p>
+<p>The CI steps map to <code>Makefile</code> targets. Running <code>make all</code> locally executes vet, test and build in the same order (add <code>make apple-bridge</code> on a Mac to match the macos job):</p>
 
 <table>
   <thead><tr><th>CI step</th><th>Local equivalent</th><th>Make target</th></tr></thead>
@@ -630,10 +652,11 @@ jobs:
     <tr><td><code>go vet ./...</code></td><td><code>go vet ./...</code></td><td><code>make vet</code></td></tr>
     <tr><td><code>go test ./...</code></td><td><code>go test ./...</code></td><td><code>make test</code></td></tr>
     <tr><td><code>go build -o mt .</code></td><td><code>go build -o mt .</code></td><td><code>make build</code></td></tr>
+    <tr><td><code>make apple-bridge</code></td><td><code>swiftc … &amp;&amp; codesign …</code></td><td><code>make apple-bridge</code> (macOS only)</td></tr>
   </tbody>
 </table>
 
-<p>Running <code>make all</code> (or <code>make vet test build</code>) before pushing gives you high confidence that CI will pass. The only difference between local and CI is the operating system — CI runs on <code>ubuntu-latest</code>, while most contributors develop on macOS. Both are supported Go platforms with no platform-specific code paths in <code>mt</code>.</p>
+<p>Running <code>make all</code> (or <code>make vet test build</code>) before pushing gives you high confidence that CI will pass. CI runs on both <code>ubuntu-latest</code> and <code>macos-latest</code>, so platform differences (the clipboard tool, the Apple bridge, macOS temp-dir symlinks) are covered whichever OS you develop on.</p>
 
 <div class="callout success">
   <strong>Tip: run CI checks before pushing</strong>

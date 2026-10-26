@@ -285,7 +285,7 @@
 <h2 id="install">Installation <a class="anchor" href="#install">#</a></h2>
 
 <h3 id="install-go">go install</h3>
-<p>Requires Go 1.21 or later.</p>
+<p>Requires Go 1.25 or later (the version in <code>go.mod</code>).</p>
 <pre><code>go install github.com/mrwalker511/mt@latest</code></pre>
 <p>This places the <code>mt</code> binary in <code>$GOPATH/bin</code> (usually <code>~/go/bin</code>). Make sure that directory is on your <code>$PATH</code>.</p>
 
@@ -314,17 +314,19 @@ make build   # produces ./mt in the project root</code></pre>
 <p>If no config file is found, built-in defaults are shown (see <a href="#defaults">Default Workspaces</a>).</p>
 
 <h3 id="layout">3-pane layout</h3>
-<div class="diagram"><span class="dim">┌────────────────┬────────────────┬────────────────────────────────┐
-│</span> <span class="hl">Domains</span>        <span class="dim">│</span> <span class="hl">Targets</span>        <span class="dim">│</span> <span class="hl">Output / Status</span>                <span class="dim">│
-│                │                │                                │
-│ &gt; App Launch   │ &gt; Microsoft    │  Press [Enter] to launch       │
-│   Dev Tools    │   Notes        │                                │
-│   Infrastructure│  Safari       │                                │
-│   Context/Git  │   Terminal     │                                │
-│                │                │                                │
-│                │                │                                │
-└────────────────┴────────────────┴────────────────────────────────┘
- [←/h focus left]  [→/l focus right]              [? help]</span></div>
+<div class="diagram"><span class="dim">┌──────────────────┬──────────────────────┬──────────────────────────────────┐
+│</span> <span class="hl">DOMAINS</span>          <span class="dim">│</span> <span class="hl">TARGETS &amp; ACTIONS</span>    <span class="dim">│</span> <span class="hl">LIVE STATUS / INFO</span>               <span class="dim">│
+│                  │                      │                                  │
+│ &gt; Outlook        │ &gt; Open Outlook       │  Press [Enter] to launch Outlook │
+│   Word           │   New Email          │                                  │
+│   Excel          │   Open Inbox         │                                  │
+│   Microsoft Edge │   Open Calendar      │                                  │
+│   VS Code        │   New 30-Min Meeting │                                  │
+│   Terminal       │   …                  │                                  │
+│   Infrastructure │                      │                                  │
+│   Context/Git    │                      │                                  │
+└──────────────────┴──────────────────────┴──────────────────────────────────┘
+ [↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [/] AI  [?] Help …</span></div>
 
 <ul>
   <li><strong>Left pane</strong> — Domain list. Arrow keys or <code>j</code>/<code>k</code> move the cursor. Domains group related targets (e.g. "Outlook", "Infrastructure", "Context/Git").</li>
@@ -358,14 +360,14 @@ make build   # produces ./mt in the project root</code></pre>
     <tr><td><code>→</code> / <code>l</code></td><td>Any</td><td>Focus right pane</td></tr>
     <tr><td><code>Enter</code></td><td>Middle pane</td><td>Execute selected target (or all multi-selected targets in parallel)</td></tr>
     <tr><td><code>Space</code></td><td>Middle pane</td><td>Toggle multi-select on current target</td></tr>
-    <tr><td><code>Tab</code></td><td>Any</td><td>Switch to next workspace</td></tr>
-    <tr><td><code>Shift+Tab</code></td><td>Any</td><td>Switch to previous workspace</td></tr>
+    <tr><td><code>Tab</code></td><td>Any (2+ workspaces)</td><td>Switch to next workspace</td></tr>
+    <tr><td><code>Shift+Tab</code></td><td>Any (2+ workspaces)</td><td>Switch to previous workspace</td></tr>
     <tr><td><code>y</code></td><td>Any</td><td>Copy right-pane output to clipboard</td></tr>
     <tr><td><code>S</code></td><td>Any</td><td>Save right-pane output to <code>~/.mt/logs/mt-TIMESTAMP.txt</code></td></tr>
     <tr><td><code>c</code></td><td>Any</td><td>Clear right-pane output</td></tr>
     <tr><td><code>R</code></td><td>Any</td><td>Reload config file without restarting</td></tr>
     <tr><td><code>/</code></td><td>Any</td><td>Open AI assistant prompt bar (natural-language input)</td></tr>
-    <tr><td><code>Esc</code></td><td>AI prompt</td><td>Cancel AI input or cancel in-flight AI request</td></tr>
+    <tr><td><code>Esc</code></td><td>Any</td><td>Close the AI prompt bar, cancel an in-flight AI request, reject a proposed AI command, or stop the running command(s)</td></tr>
     <tr><td><code>?</code></td><td>Any</td><td>Toggle help overlay</td></tr>
     <tr><td><code>q</code> / <code>Ctrl+C</code></td><td>Any</td><td>Quit (cancels any running commands)</td></tr>
   </tbody>
@@ -436,8 +438,9 @@ workspaces:
     <tr><td><code>launch_msg</code></td><td>No</td><td>Message shown when <code>cmd</code> exits successfully with no output (e.g. <code>open -a</code> produces no stdout).</td></tr>
     <tr><td><code>host</code></td><td>No</td><td>SSH host in <code>[user@]hostname</code> form. If set, <code>cmd</code> is executed as <code>ssh host &lt;cmd&gt;</code>. See <a href="#feat-ssh">SSH targets</a>.</td></tr>
     <tr><td><code>sequence</code></td><td>No</td><td>Ordered list of target names to run in series. If any step fails, the sequence stops. See <a href="#feat-sequence">Sequence</a>.</td></tr>
-    <tr><td><code>apps</code></td><td>No</td><td>macOS only. List of app names; each expands to an <code>open -a</code> target. Shorthand for common launchers. See <a href="#config-apps">Apps shorthand</a>.</td></tr>
-    <tr><td><code>include</code></td><td>No</td><td>List of YAML file paths to merge into this config. See <a href="#config-include">Include directive</a>.</td></tr>
+    <tr><td><code>apps</code></td><td>No</td><td>Domain-level, macOS only. List of app names; each expands to an <code>open -a</code> target. Shorthand for common launchers. See <a href="#config-apps">Apps shorthand</a>.</td></tr>
+    <tr><td><code>include</code></td><td>No</td><td>Top-level. List of YAML file paths to merge into this config. See <a href="#config-include">Include directive</a>.</td></tr>
+    <tr><td><code>llm</code></td><td>No</td><td>Top-level. AI assistant provider settings. See <a href="#config-llm">LLM configuration</a>.</td></tr>
   </tbody>
 </table>
 
@@ -484,18 +487,21 @@ domains:
         cmd: ["open", "-a", "Mail"]</code></pre>
 <p>Include rules:</p>
 <ul>
-  <li>Relative paths resolve relative to the file that declares them.</li>
+  <li>Relative paths resolve relative to the file that declares them. A leading <code>~/</code> expands to your home directory.</li>
   <li>All paths (after resolving symlinks) must remain within your home directory (<code>$HOME</code>). Paths outside <code>$HOME</code> are rejected as a security measure.</li>
   <li>Circular includes are detected and silently skipped.</li>
-  <li>Included <code>domains:</code> are merged; included <code>workspaces:</code> are appended.</li>
+  <li>Included <code>domains:</code> are merged; included <code>workspaces:</code> are appended. Only the top-level file's <code>llm:</code> block is used.</li>
+  <li>A missing or invalid include file is an error: mt reports it and falls back to the built-in defaults rather than silently loading a partial config.</li>
+  <li>If the merged result has any <code>workspaces:</code>, top-level <code>domains:</code> are ignored. Use one form or the other.</li>
 </ul>
 
 <!-- ── Features ─────────────────────────────────────────────────────── -->
 <h2 id="features">Features <a class="anchor" href="#features">#</a></h2>
 
 <h3 id="feat-single">Single command</h3>
-<p>The default mode. Navigate to any target with a <code>cmd:</code> field and press <code>Enter</code>. The command runs asynchronously; the right pane shows output when it completes. While a command runs, a visual indicator shows it is in progress and <code>Enter</code> is ignored.</p>
-<p>Output is bounded to 1 MB. Longer output is automatically truncated with a notice.</p>
+<p>The default mode. Navigate to any target with a <code>cmd:</code> field and press <code>Enter</code>. The command runs asynchronously; the right pane shows output when it completes. While a command runs, the right pane shows <em>Running…</em> and <code>Enter</code> is ignored. Press <code>Esc</code> to stop it (useful for commands that never exit on their own, such as <code>tail -f</code>).</p>
+<p>You can move to other targets while a command runs. When it finishes, its output is filed under the target that ran it, so you see it when you return to that target.</p>
+<p>Output (stdout and stderr combined) is capped at 1 MB while the command runs; anything beyond that is discarded and a truncation notice is appended. Commands run without a terminal and with stdin closed, so interactive prompts will not work.</p>
 
 <h3 id="feat-sequence">Sequence</h3>
 <p>A target with a <code>sequence:</code> field executes named targets in order. If any step exits non-zero, the sequence stops immediately.</p>
@@ -511,16 +517,22 @@ domains:
         cmd: ["make", "test"]
       - name: "Deploy"
         cmd: ["./scripts/deploy.sh", "production"]</code></pre>
-<p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails). A sequence step that has no <code>cmd:</code> field produces an error and stops the sequence.</p>
+<p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails). Step names are looked up across every domain in the current workspace. Rules:</p>
+<ul>
+  <li>If a step name does not match any target (e.g. a typo), the sequence refuses to start and names the missing step, so a pipeline can never silently skip <em>Test</em> and go straight to <em>Deploy</em>.</li>
+  <li>A step with no <code>cmd:</code> (including a step that is itself a sequence) produces an error and stops the sequence.</li>
+  <li>If two targets share a step's name, the one in the last domain wins. Keep step names unique.</li>
+  <li><code>Esc</code> stops the current step and the rest of the sequence.</li>
+</ul>
 
 <h3 id="feat-parallel">Multi-select parallel</h3>
 <p>Run multiple targets at the same time:</p>
 <ol>
   <li>Focus the middle pane (<code>→</code> or <code>l</code>).</li>
-  <li>Press <code>Space</code> to toggle each target you want to run. A check mark appears next to selected targets.</li>
+  <li>Press <code>Space</code> to toggle each target you want to run. A <code>◆</code> marker appears before selected targets.</li>
   <li>Press <code>Enter</code> to run all selected targets in parallel.</li>
 </ol>
-<p>When all commands complete, output is shown with <code>=== Target Name ===</code> headers so you can identify each result. Selection is cleared automatically after execution.</p>
+<p>When all commands complete, output is shown with <code>=== Target Name ===</code> headers so you can identify each result, and each target gets its own ✓/✗ badge. Selection is cleared automatically after execution. Targets without a <code>cmd:</code> (including sequence targets) are skipped in a parallel run. <code>Esc</code> stops all of them.</p>
 
 <h3 id="feat-ssh">SSH targets</h3>
 <p>Set the <code>host:</code> field to run a command on a remote server:</p>
@@ -535,7 +547,11 @@ domains:
       - name: "Tail Logs"
         host: "app@prod.example.com"
         cmd: ["journalctl", "-fu", "myapp"]</code></pre>
-<p>With <code>host:</code> set, mt runs <code>ssh host &lt;cmd&gt;</code>. SSH uses your existing key configuration (<code>~/.ssh/config</code>, <code>ssh-agent</code>). No credentials are stored by mt.</p>
+<p>With <code>host:</code> set, mt runs <code>ssh host &lt;cmd&gt;</code>. SSH uses your existing key configuration (<code>~/.ssh/config</code>, <code>ssh-agent</code>). No credentials are stored by mt. Commands that never exit, like the <code>journalctl -f</code> example above, keep running until you press <code>Esc</code>.</p>
+<div class="callout warn">
+  <strong>The remote shell interprets the command</strong>
+  SSH joins the <code>cmd:</code> array with spaces and hands it to the remote user's shell, so on SSH targets quoting, globs, pipes and <code>$VARS</code> <em>are</em> interpreted remotely. This is unlike local targets, which never go through a shell. Quote arguments that contain spaces yourself, e.g. <code>cmd: ["ls", "'My Dir'"]</code>.
+</div>
 <div class="callout">
   <strong>Host validation</strong>
   The <code>host:</code> value must match <code>[a-zA-Z0-9][a-zA-Z0-9._@%-]*</code>. Values starting with <code>-</code> or containing spaces are rejected at config load time to prevent SSH option injection.
@@ -576,15 +592,15 @@ domains:
 
 <h3 id="feat-reload">Config hot-reload</h3>
 <p>Press <code>R</code> to reload your config file without quitting. This lets you edit <code>mt.yaml</code> in a separate terminal and instantly see the changes in the running <code>mt</code> session.</p>
-<p>Hot-reload resets cursor positions, clears selections, and clears cached output. If the new config is invalid, an error is shown and the previous config continues in use.</p>
+<p>Hot-reload also re-reads the <code>llm:</code> settings. It resets cursor positions, clears selections, and clears cached output. If the new config is invalid, an error is shown and the previous config continues in use.</p>
 
 <h3 id="feat-ai">AI assistant</h3>
-<p>Press <code>/</code> to open the AI prompt bar at the bottom of the screen. Type a natural-language request and press <code>Enter</code>. The local LLM maps your query to one of three actions:</p>
+<p>Press <code>/</code> to open the AI prompt bar at the bottom of the screen. Type a natural-language request (up to 500 characters) and press <code>Enter</code>. The configured LLM receives the names and first status line of every target in the current workspace, plus the current time, and must reply with exactly one of three actions:</p>
 <table>
   <thead><tr><th>LLM response</th><th>What happens</th></tr></thead>
   <tbody>
-    <tr><td><code>RUN:&lt;target_name&gt;</code></td><td>Runs the named target from the current workspace (same as navigating to it and pressing Enter)</td></tr>
-    <tr><td><code>CMD:["prog","arg",…]</code></td><td>Executes the returned command array directly — useful for dynamically generated osascript or shell commands</td></tr>
+    <tr><td><code>RUN:&lt;target_name&gt;</code></td><td>Selects the named target (case-insensitive match) in the current workspace and runs it, exactly as if you had navigated to it and pressed Enter. Sequence targets work too.</td></tr>
+    <tr><td><code>CMD:["prog","arg",…]</code></td><td>Shows the proposed command and waits. Press <code>Enter</code> to run it or <code>Esc</code> to reject it. Nothing runs without your confirmation. Useful for dynamically generated <code>osascript</code> commands.</td></tr>
     <tr><td><code>INFO:&lt;text&gt;</code></td><td>Displays a short text answer in the right pane</td></tr>
   </tbody>
 </table>
@@ -593,9 +609,8 @@ domains:
   <li><code>open outlook</code> → runs the <em>Open Outlook</em> target</li>
   <li><code>create a 30-min meeting with john@company.com tomorrow at 2pm</code> → generates and runs an osascript that creates the event in Outlook</li>
   <li><code>what does git stash do</code> → returns a short explanation</li>
-  <li><code>start docker and check postgres</code> → runs <em>Docker Up</em> then <em>Postgres</em> if they exist as targets</li>
 </ul>
-<p>Press <code>Esc</code> to cancel the input or cancel an in-flight request. Requires a local LLM server — see <a href="#config-llm">LLM configuration</a>.</p>
+<p>Each request handles one action, so for multi-step work use a <a href="#feat-sequence">sequence</a> target. A reply without a recognised prefix is shown as INFO text. Requests time out after 30 seconds. Press <code>Esc</code> to close the prompt bar or cancel an in-flight request. Requires an LLM provider (see <a href="#config-llm">LLM configuration</a>).</p>
 
 <!-- ── LLM Configuration ─────────────────────────────────────────────── -->
 <h2 id="config-llm">LLM configuration <a class="anchor" href="#config-llm">#</a></h2>
@@ -687,9 +702,9 @@ make install-apple-bridge    # installs to /usr/local/bin/mt-apple-bridge</code>
   <thead><tr><th>Field</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>provider</code></td><td><code>litellm</code></td><td><code>litellm</code>, <code>llamacpp</code>, <code>mlx</code>, <code>openai</code>, or <code>apple</code>.</td></tr>
-    <tr><td><code>model</code></td><td><em>provider-specific</em></td><td>Model name passed to the provider. MLX and llama.cpp treat it as an informational label (the server uses whatever model it loaded). LiteLLM uses it for routing (e.g. <code>ollama/llama3.1:8b</code>).</td></tr>
-    <tr><td><code>base_url</code></td><td><code>http://localhost:4000</code> / <code>:8080</code> / <code>:8000</code> / openai.com</td><td>API base URL. Override to point at any OpenAI-compatible server.</td></tr>
-    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>Required for <code>openai</code> provider only. Ignored by all local providers.</td></tr>
+    <tr><td><code>model</code></td><td><em>provider-specific</em></td><td>Model name passed to the provider. Defaults to <code>gpt-4o-mini</code> for <code>openai</code>. For other providers it is omitted from the request when unset, so llama.cpp and MLX use whatever model the server loaded. LiteLLM uses it for routing (e.g. <code>ollama/llama3.1:8b</code>).</td></tr>
+    <tr><td><code>base_url</code></td><td><code>http://localhost:4000</code> / <code>:8080</code> / <code>:8000</code> / openai.com</td><td>API base URL <em>without</em> the <code>/v1</code> suffix (mt appends <code>/v1/chat/completions</code>). Override to point at any OpenAI-compatible server. For example, Ollama works with <code>provider: llamacpp</code>, <code>base_url: http://localhost:11434</code> and a <code>model:</code>.</td></tr>
+    <tr><td><code>api_key</code></td><td><em>env: OPENAI_API_KEY</em></td><td>Sent as <code>Authorization: Bearer …</code> when set (e.g. a LiteLLM master key). Required for <code>openai</code>, which falls back to the <code>OPENAI_API_KEY</code> environment variable.</td></tr>
     <tr><td><code>bridge_path</code></td><td><em>auto-discovered</em></td><td><code>apple</code> provider only. Absolute path to <code>mt-apple-bridge</code>. If omitted, mt looks next to the <code>mt</code> binary then searches <code>$PATH</code>.</td></tr>
     <tr><td><code>debug</code></td><td><code>false</code></td><td>When <code>true</code>, appends every LLM request and response to <code>~/.mt/logs/debug.log</code>. See <a href="#llm-debug">Debug logging</a>.</td></tr>
   </tbody>
@@ -816,17 +831,18 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
 <p>Include chains are tracked by canonical path. If a file has already been loaded in the current chain it is silently skipped, preventing infinite loops.</p>
 
 <h3>Command execution safety</h3>
-<p>Commands are always passed as argument arrays, never through a shell. <code>cmd: ["git", "status"]</code> calls <code>exec.Command("git", "status")</code>, not <code>sh -c "git status"</code>. This means shell metacharacters (<code>;</code>, <code>|</code>, <code>&amp;</code>, etc.) in arguments are always treated as literals, not shell syntax.</p>
+<p>Local commands are always passed as argument arrays, never through a shell. <code>cmd: ["git", "status"]</code> calls <code>exec.Command("git", "status")</code>, not <code>sh -c "git status"</code>. This means shell metacharacters (<code>;</code>, <code>|</code>, <code>&amp;</code>, etc.) in arguments are treated as literals, not shell syntax. The exception is <a href="#feat-ssh">SSH targets</a>, whose command is interpreted by the remote shell.</p>
+<p>Commands proposed by the AI assistant (<code>CMD:</code>) never run until you confirm them with <code>Enter</code>.</p>
 
 <h3>Output and cache bounds</h3>
-<p>Command output is truncated at 1 MB before being stored or displayed. Per-target cached output is limited to 256 KB. This prevents runaway commands from exhausting available memory.</p>
+<p>Command output is capped at 1 MB as it is read, so a runaway command cannot grow memory without limit. Per-target cached output is limited to 256 KB. This prevents runaway commands from exhausting available memory.</p>
 
 <h3>Log file safe creation</h3>
 <p>Log files are created with <code>O_EXCL</code> (exclusive creation), which fails if anything — including a symlink — already exists at the target path. This closes a TOCTOU race that could otherwise be used to overwrite an arbitrary file.</p>
 <p>Log files are stored in <code>~/.mt/logs/</code> with mode <code>0640</code> (readable only by owner and group). The directory itself is created with mode <code>0750</code>.</p>
 
 <h3>Goroutine and process cancellation</h3>
-<p>All commands and polling operations use a shared <code>context.Context</code>. Pressing <code>q</code> or <code>Ctrl+C</code> cancels the context, which immediately terminates any in-flight <code>exec.Command</code> processes. No goroutines are left running after mt exits.</p>
+<p>All commands and polling operations use a shared <code>context.Context</code>. Pressing <code>q</code> or <code>Ctrl+C</code> cancels the context, which kills any in-flight <code>exec.Command</code> processes. <code>Esc</code> cancels only the current run's child context, stopping the running command(s) while mt keeps going.</p>
 
 <!-- ── Troubleshooting ───────────────────────────────────────────────── -->
 <h2 id="troubleshoot">Troubleshooting <a class="anchor" href="#troubleshoot">#</a></h2>
@@ -856,8 +872,8 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
       <td>Add at least one domain with one target</td>
     </tr>
     <tr>
-      <td>"Config error — using built-in defaults"</td>
-      <td>Config file was found but could not be parsed</td>
+      <td>"Config error (using built-in defaults): …"</td>
+      <td>Config file (or one of its includes) was found but is missing, unreadable or invalid. The message after the colon gives the exact cause.</td>
       <td>Check YAML syntax; run <code>cat config.yaml | python3 -c "import sys,yaml;yaml.safe_load(sys.stdin)"</code></td>
     </tr>
   </tbody>
@@ -876,6 +892,16 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
       <td>"openai: no API key"</td>
       <td>Missing API key for <code>openai</code> provider</td>
       <td>Set <code>api_key: sk-…</code> in config or export <code>OPENAI_API_KEY</code> in your shell</td>
+    </tr>
+    <tr>
+      <td>"unknown llm provider"</td>
+      <td><code>provider:</code> is misspelled or not supported</td>
+      <td>Use <code>litellm</code>, <code>llamacpp</code>, <code>mlx</code>, <code>openai</code> or <code>apple</code>. For another OpenAI-compatible server (Ollama, LM Studio, vLLM) use <code>llamacpp</code> with its <code>base_url</code>.</td>
+    </tr>
+    <tr>
+      <td>"HTTP 404" from a local server</td>
+      <td><code>base_url</code> ends in <code>/v1</code>, so the request went to <code>/v1/v1/chat/completions</code></td>
+      <td>Drop the <code>/v1</code>: mt appends it.</td>
     </tr>
     <tr>
       <td>"apple: mt-apple-bridge not found"</td>
@@ -925,7 +951,7 @@ sudo apt install wl-clipboard</code></pre>
 </ul>
 
 <h3>Commands appear to hang</h3>
-<p>Some commands block waiting for stdin (e.g. interactive prompts). Since mt captures output without a TTY, the command may hang. Use non-interactive flags (e.g. <code>docker exec -it</code> → <code>docker exec</code>, <code>git commit</code> with <code>-m</code>). Quit mt (<code>q</code>) to cancel any in-flight command.</p>
+<p>Some commands block waiting for stdin (e.g. interactive prompts). Since mt captures output without a TTY, the command may hang. Use non-interactive flags (e.g. <code>docker exec -it</code> → <code>docker exec</code>, <code>git commit</code> with <code>-m</code>). Press <code>Esc</code> to stop the command.</p>
 
 <h3>Terminal is too narrow</h3>
 <p>mt requires a minimum terminal width to render correctly. Widen your terminal window if you see a "terminal too narrow" message.</p>

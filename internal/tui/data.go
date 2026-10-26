@@ -279,19 +279,19 @@ var initialDomains = []Domain{
 	{
 		Name: "Infrastructure",
 		Targets: []Target{
-			{Name: "Docker Up",   Status: "Docker: Stopped\n\nPress [Enter] to start containers", Cmd: []string{"docker", "compose", "up", "-d"}},
-			{Name: "Docker Down", Status: "Press [Enter] to stop all containers",                 Cmd: []string{"docker", "compose", "down"}},
-			{Name: "Postgres",    Status: "Container: postgres\nPress [Enter] to check status",   Cmd: []string{"docker", "ps", "--filter", "name=postgres", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}},
-			{Name: "Redis",       Status: "Container: redis\nPress [Enter] to check status",      Cmd: []string{"docker", "ps", "--filter", "name=redis",    "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}},
+			{Name: "Docker Up", Status: "Docker: Stopped\n\nPress [Enter] to start containers", Cmd: []string{"docker", "compose", "up", "-d"}},
+			{Name: "Docker Down", Status: "Press [Enter] to stop all containers", Cmd: []string{"docker", "compose", "down"}},
+			{Name: "Postgres", Status: "Container: postgres\nPress [Enter] to check status", Cmd: []string{"docker", "ps", "--filter", "name=postgres", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}},
+			{Name: "Redis", Status: "Container: redis\nPress [Enter] to check status", Cmd: []string{"docker", "ps", "--filter", "name=redis", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}},
 		},
 	},
 	{
 		Name: "Context/Git",
 		Targets: []Target{
-			{Name: "Git Status", Status: "Press [Enter] to run git status",  Cmd: []string{"git", "status"}},
-			{Name: "Git Diff",   Status: "Press [Enter] to view diff",       Cmd: []string{"git", "diff"}},
-			{Name: "Branches",   Status: "Press [Enter] to list branches",   Cmd: []string{"git", "branch", "-a"}},
-			{Name: "Stash",      Status: "Press [Enter] to list stash",      Cmd: []string{"git", "stash", "list"}},
+			{Name: "Git Status", Status: "Press [Enter] to run git status", Cmd: []string{"git", "status"}},
+			{Name: "Git Diff", Status: "Press [Enter] to view diff", Cmd: []string{"git", "diff"}},
+			{Name: "Branches", Status: "Press [Enter] to list branches", Cmd: []string{"git", "branch", "-a"}},
+			{Name: "Stash", Status: "Press [Enter] to list stash", Cmd: []string{"git", "stash", "list"}},
 		},
 	},
 }

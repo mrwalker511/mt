@@ -209,3 +209,32 @@ func TestGenerateMLX_Dispatch(t *testing.T) {
 		t.Errorf("unexpected response: %q", got)
 	}
 }
+
+func TestGenerate_UnknownProvider_ReturnsError(t *testing.T) {
+	_, err := Generate(context.Background(), Config{Provider: "ollama"}, "sys", "hi")
+	if err == nil || !strings.Contains(err.Error(), "unknown llm provider") {
+		t.Errorf("expected unknown provider error, got %v", err)
+	}
+}
+
+func TestGenerate_TrailingSlashBaseURL_NoModel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		if _, ok := raw["model"]; ok {
+			t.Errorf("model should be omitted when unset, got %v", raw["model"])
+		}
+		json.NewEncoder(w).Encode(openAIResponse{Choices: []openAIChoice{{Message: openAIMessage{Content: "INFO: ok"}}}})
+	}))
+	defer srv.Close()
+
+	got, err := Generate(context.Background(), Config{Provider: "mlx", BaseURL: srv.URL + "/"}, "sys", "hi")
+	if err != nil || got != "INFO: ok" {
+		t.Errorf("got %q, %v", got, err)
+	}
+}

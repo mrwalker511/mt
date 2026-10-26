@@ -62,7 +62,7 @@ domains:
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -113,7 +113,7 @@ workspaces:
 	}
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -143,7 +143,7 @@ domains:
 	}
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -187,7 +187,7 @@ domains:
 	}
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -217,7 +217,7 @@ func TestLoadWorkspaces_InvalidYAML_ReturnsDefaults(t *testing.T) {
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -260,7 +260,7 @@ domains:
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -322,7 +322,7 @@ domains:
 	}
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -357,7 +357,7 @@ domains:
 	}
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -384,7 +384,7 @@ func TestLoadWorkspaces_EmptyDomains_ReturnsDefaults(t *testing.T) {
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -415,7 +415,7 @@ domains:
 	}
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -445,7 +445,7 @@ func TestLoadWorkspaces_WorldWritableConfig_ReturnsError(t *testing.T) {
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
@@ -503,7 +503,7 @@ func TestLoadWorkspaces_WorldWritableInclude_ReturnsError(t *testing.T) {
 
 	orig, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
-	os.Chdir(dir)                         //nolint:errcheck
+	os.Chdir(dir)                        //nolint:errcheck
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	workspaces, _, err := LoadWorkspaces()
