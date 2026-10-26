@@ -52,22 +52,15 @@ func (m Model) View() string {
 	var hint string
 	switch {
 	case m.inputMode:
-		hint = "AI › " + m.inputBuf + "█   [Esc] cancel"
+		hint = "AI › " + m.inputBuf + "█   ⏎ send  ⎋ close  ⌥⌫ delete word"
 	case m.llmPending:
-		hint = "AI › thinking…   [Esc] cancel"
+		hint = "AI › thinking…   ⎋ cancel"
 	case m.confirmCmd != nil:
-		hint = "AI › run: " + strings.Join(m.confirmCmd, " ") + "   [Enter] confirm · [Esc] cancel"
+		hint = "AI › run: " + strings.Join(m.confirmCmd, " ") + "   ⏎ confirm  ⎋ cancel"
+	case m.running:
+		hint = "Running…   ⎋ stop   " + statusBarHints(len(m.allWorkspaces))
 	default:
-		hint = "[↑↓/jk] Move  [←→/hl] Pane  [↵] Run  [Space] Select  [/] AI  [y] Copy  [S] Save  [c] Clear  [?] Help  [R] Reload  [q] Quit"
-		if m.running {
-			hint = "Running…   [Esc] cancel  ·  " + hint
-		}
-		if len(m.allWorkspaces) > 1 {
-			hint += "  [tab] Workspace"
-		}
-		if m.activePane == paneRight && m.output != "" {
-			hint += "  [j/k] Scroll"
-		}
+		hint = statusBarHints(len(m.allWorkspaces))
 	}
 	// MaxHeight keeps the bar to one line on narrow terminals; a wrapped bar would
 	// push the frame past the terminal height.
@@ -145,47 +138,26 @@ func renderPane(focused bool, w, h int, content string) string {
 	return style.Render(wrapped)
 }
 
-// renderHelp builds the keybinding reference displayed when showHelp is true.
+// renderHelp builds the key reference displayed when showHelp is true. The
+// current target's command comes first so it stays visible in short panes.
 func (m Model) renderHelp() string {
-	lines := []string{
-		dimItemStyle.Render("Navigation"),
-		normalItemStyle.Render("  ↑ / k        Move up"),
-		normalItemStyle.Render("  ↓ / j        Move down"),
-		normalItemStyle.Render("  ← / h        Focus left pane"),
-		normalItemStyle.Render("  → / l        Focus right pane"),
-		"",
-		dimItemStyle.Render("Actions"),
-		normalItemStyle.Render("  Enter        Run target (or all selected)"),
-		normalItemStyle.Render("  Space        Toggle target selection"),
-		normalItemStyle.Render("  y            Copy output to clipboard"),
-		normalItemStyle.Render("  S            Save output to ~/.mt/logs/"),
-		normalItemStyle.Render("  c            Clear output"),
-		normalItemStyle.Render("  Esc          Cancel running command / AI query"),
-		normalItemStyle.Render("  R            Reload config file"),
-	}
-	if len(m.allWorkspaces) > 1 {
-		lines = append(lines,
-			normalItemStyle.Render("  Tab          Next workspace"),
-			normalItemStyle.Render("  Shift+Tab    Previous workspace"),
-		)
-	}
-	lines = append(lines,
-		normalItemStyle.Render("  /            Open AI assistant prompt"),
-		normalItemStyle.Render("  ?            Toggle this help"),
-		normalItemStyle.Render("  q / Ctrl+C   Quit"),
-	)
+	var lines []string
 	if t, ok := m.currentTarget(); ok {
-		lines = append(lines, "", dimItemStyle.Render("Current target"))
-		lines = append(lines, normalItemStyle.Render("  "+t.Name))
+		lines = append(lines, dimItemStyle.Render(t.Name))
 		switch {
 		case len(t.Sequence) > 0:
-			lines = append(lines, dimItemStyle.Render("  sequence: "+strings.Join(t.Sequence, " → ")))
+			lines = append(lines, dimItemStyle.Render("sequence: "+strings.Join(t.Sequence, " → ")))
 		case len(t.Cmd) > 0:
-			lines = append(lines, dimItemStyle.Render("  $ "+strings.Join(effectiveCmd(t), " ")))
+			lines = append(lines, dimItemStyle.Render("$ "+strings.Join(effectiveCmd(t), " ")))
 		default:
-			lines = append(lines, dimItemStyle.Render("  (no command configured)"))
+			lines = append(lines, dimItemStyle.Render("(no command configured)"))
 		}
+		lines = append(lines, "")
 	}
+	for _, l := range compactHelp(len(m.allWorkspaces)) {
+		lines = append(lines, normalItemStyle.Render(l))
+	}
+	lines = append(lines, "", dimItemStyle.Render("Full list: mt --keys"))
 	return strings.Join(lines, "\n")
 }
 

@@ -24,23 +24,36 @@ make build   # produces ./mt
 mt
 ```
 
-| Key | Action |
-|-----|--------|
-| `↑` / `k` | Move up / scroll output up (right pane) |
-| `↓` / `j` | Move down / scroll output down (right pane) |
-| `←` / `h` | Focus left pane |
-| `→` / `l` | Focus right pane |
-| `Enter` | Execute selected target (or all multi-selected targets in parallel) |
-| `Space` | Toggle multi-select on current target (middle pane) |
-| `y` | Copy right-pane output to clipboard |
-| `S` | Save right-pane output to `~/.mt/logs/mt-TIMESTAMP.txt` |
-| `c` | Clear right-pane output |
-| `R` | Reload config file without restarting |
-| `/` | Open the AI prompt bar |
-| `Esc` | Stop the running command(s), cancel an AI request, or close the prompt bar |
-| `?` | Toggle help overlay |
-| `Tab` / `Shift+Tab` | Switch workspace (when multiple workspaces configured) |
-| `q` / `Ctrl+C` | Quit (cancels any running commands) |
+Keys follow Mac conventions. A terminal app never receives ⌘, so each ⌘ shortcut becomes the same letter on its own: ⌘C is `c`, ⌘S is `s`, ⌘R is `r`, ⌘Q is `q`. Press `?` in mt for a compact reference, or run `mt --keys` to print the full list.
+
+| Key | Action | Mac mnemonic |
+|-----|--------|--------------|
+| `⏎` Return | Run the selected target (or every selected target, in parallel) | Open |
+| `␣` Space | Select / deselect a target for a parallel run (middle pane) | Finder selection |
+| `⎋` Esc | Stop the running command(s), cancel an AI request, or close the prompt bar | Cancel |
+| `/` | Ask the AI assistant | |
+| `c` | Copy output to the clipboard | ⌘C |
+| `s` | Save output to `~/.mt/logs/mt-TIMESTAMP.txt` | ⌘S |
+| `⌫` Delete | Clear output (also `⌃K`) | ⌘K in Terminal |
+| `↑` `↓` | Move the cursor; scroll output when the right pane has focus | |
+| `←` `→` | Focus the pane to the left / right | Finder columns |
+| `⇥` / `⇧⇥` | Cycle pane focus (wraps around) | Tab between controls |
+| `fn↑` `fn↓` | Page output up / down (Page Up / Page Down) | |
+| `fn←` `fn→` | Jump to top / bottom of output (Home / End) | |
+| `[` / `]` | Previous / next workspace (2+ workspaces) | ⌘⇧[ / ⌘⇧] switch tabs |
+| `1`–`9` | Jump to workspace N (2+ workspaces) | ⌘1–⌘9 |
+| `r` | Reload the config file | ⌘R |
+| `?` | Show / hide the key reference | ⌘? Help |
+| `q` / `⌃C` | Quit (cancels any running commands) | ⌘Q |
+
+Older keys still work: `y` (copy), `S` (save), `R` (reload) and `h` `j` `k` `l` (vim-style movement). Two keys changed meaning: `c` now copies (it used to clear; use `⌫`), and `Tab` now cycles panes (workspaces moved to `[` / `]`).
+
+In the AI prompt bar: `⌫` deletes a character, `⌥⌫` or `⌃W` deletes a word, and `⌃U` clears the line.
+
+**Terminal setup tips (macOS):**
+- **Terminal.app:** for `⌥⌫` to delete a word, tick *Settings → Profiles → Keyboard → Use Option as Meta key*.
+- **iTerm2:** choose *Settings → Profiles → Keys → Key Mappings → Presets → Natural Text Editing*. Then `⌥⌫` deletes a word and `⌘⌫` clears the prompt line.
+- **`fn↑` / `fn↓`:** if the terminal scrolls its own window instead of mt's output, hold `⇧` as well, or use `↑` / `↓` with the right pane focused.
 
 ## AI Assistant
 
@@ -177,7 +190,7 @@ domains:
 
 Each entry auto-expands to `open -a <name>` with a launch message.
 
-**Multiple workspaces:** Switch contexts live with `Tab`/`Shift+Tab`:
+**Multiple workspaces:** Switch contexts live with `[` / `]`, or jump straight to one with `1`–`9`:
 
 ```yaml
 workspaces:
