@@ -6,7 +6,7 @@
 #
 # ─── Quick-start: apps shorthand ──────────────────────────────────────────────
 # List Mac app names under apps: and mt generates the open -a command for you.
-# No cmd/status/launch_msg needed — just the name as macOS knows it.
+# No run/status/launch_msg needed — just the name as macOS knows it.
 #
 #   domains:
 #     - name: "My Apps"
@@ -25,10 +25,19 @@
 # Full field reference:
 #   name       — display label (required)
 #   status     — hint text shown in the right pane before any command runs
-#   cmd        — command and arguments to execute on Enter (omit to disable)
-#   launch_msg — message shown when cmd exits 0 with no output (e.g. open -a)
+#   run        — command to execute on Enter, written as you would type it:
+#                  run: git log --oneline -n 10
+#                  run: open -a "Microsoft Word"
+#                Quotes group words. There is no shell: pipes, redirects, $VARS
+#                and ~ are rejected; use cmd: ["sh", "-c", "..."] if you need them.
+#                On SSH targets (host: set) the string goes to the remote shell
+#                unchanged, so pipes and $VARS work there.
+#   cmd        — the same as run, as an explicit list: ["git", "status"].
+#                Use it when an argument is awkward to quote (e.g. AppleScript).
+#                A target sets run or cmd, not both; omit both for a hint-only target.
+#   launch_msg — message shown when the command exits 0 with no output (e.g. open -a)
 #   sequence   — ordered list of target names to run in series (stops on failure)
-#   host       — SSH host ([user@]hostname); cmd is run as: ssh host <cmd>
+#   host       — SSH host ([user@]hostname); the command runs as: ssh host <command>
 #   include    — (top-level) list of YAML files to merge; ~/ allowed; must be within $HOME
 #   apps       — (domain-level) list of Mac app names, each expanded to `open -a <name>`
 #   llm        — (top-level) AI assistant settings, see below
@@ -121,28 +130,28 @@ workspaces:
       - name: "Outlook"
         targets:
           - name: "Open Outlook"
-            cmd: ["open", "-a", "Microsoft Outlook"]
+            run: open -a "Microsoft Outlook"
             launch_msg: "Opening Outlook…"
 
           - name: "New Email"
             status: "Opens a new draft email in Outlook"
-            cmd: ["open", "ms-outlook://compose"]
+            run: open ms-outlook://compose
             launch_msg: "Opening new email…"
 
           - name: "Open Inbox"
             status: "Opens the Outlook inbox"
-            cmd: ["open", "ms-outlook://mail"]
+            run: open ms-outlook://mail
             launch_msg: "Opening inbox…"
 
           - name: "Open Calendar"
             status: "Opens the Outlook calendar view"
-            cmd: ["open", "ms-outlook://calendar"]
+            run: open ms-outlook://calendar
             launch_msg: "Opening calendar…"
 
       - name: "Word"
         targets:
           - name: "Open Word"
-            cmd: ["open", "-a", "Microsoft Word"]
+            run: open -a "Microsoft Word"
             launch_msg: "Opening Word…"
 
           - name: "New Document"
@@ -154,7 +163,7 @@ workspaces:
       - name: "Excel"
         targets:
           - name: "Open Excel"
-            cmd: ["open", "-a", "Microsoft Excel"]
+            run: open -a "Microsoft Excel"
             launch_msg: "Opening Excel…"
 
           - name: "New Workbook"
@@ -166,19 +175,17 @@ workspaces:
       - name: "Edge"
         targets:
           - name: "Open Edge"
-            cmd: ["open", "-a", "Microsoft Edge"]
+            run: open -a "Microsoft Edge"
             launch_msg: "Opening Edge…"
 
           - name: "Outlook Web"
             status: "Opens Outlook in Edge"
-            cmd: ["open", "-a", "Microsoft Edge", "--args",
-                  "https://outlook.office.com"]
+            run: open -a "Microsoft Edge" --args https://outlook.office.com
             launch_msg: "Opening Outlook Web…"
 
           - name: "New InPrivate Window"
             status: "Opens a private browsing window"
-            cmd: ["open", "-a", "Microsoft Edge", "--args",
-                  "--inprivate"]
+            run: open -a "Microsoft Edge" --args --inprivate
             launch_msg: "Opening InPrivate window…"
 
   # ── Dev workspace ────────────────────────────────────────────────────────────
@@ -188,34 +195,32 @@ workspaces:
       - name: "VS Code"
         targets:
           - name: "Open VS Code"
-            cmd: ["open", "-a", "Visual Studio Code"]
+            run: open -a "Visual Studio Code"
             launch_msg: "Opening VS Code…"
 
           - name: "Open Current Dir"
             status: "Opens the current working directory in VS Code"
-            cmd: ["code", "."]
+            run: code .
             launch_msg: "Opening folder in VS Code…"
 
       - name: "Terminal"
         targets:
           - name: "New Terminal Window"
-            cmd: ["open", "-a", "Terminal"]
+            run: open -a Terminal
             launch_msg: "Opening Terminal…"
 
           - name: "New iTerm2 Window"
-            cmd: ["open", "-a", "iTerm"]
+            run: open -a iTerm
             launch_msg: "Opening iTerm2…"
 
       - name: "Infrastructure"
         targets:
           - name: "Docker Up"
             status: "Docker: Stopped\n\nPress [Enter] to start containers"
-            cmd: ["docker", "compose", "up", "-d"]
-
+            run: docker compose up -d
           - name: "Docker Down"
             status: "Press [Enter] to stop all containers"
-            cmd: ["docker", "compose", "down"]
-
+            run: docker compose down
           - name: "Postgres"
             status: "Container: postgres\nPress [Enter] to check status"
             cmd: ["docker", "ps", "--filter", "name=postgres", "--format",
@@ -230,20 +235,16 @@ workspaces:
         targets:
           - name: "Git Status"
             status: "Press [Enter] to run git status"
-            cmd: ["git", "status"]
-
+            run: git status
           - name: "Git Diff"
             status: "Press [Enter] to view diff"
-            cmd: ["git", "diff"]
-
+            run: git diff
           - name: "Branches"
             status: "Press [Enter] to list branches"
-            cmd: ["git", "branch", "-a"]
-
+            run: git branch -a
           - name: "Stash"
             status: "Press [Enter] to list stash"
-            cmd: ["git", "stash", "list"]
-
+            run: git stash list
   # ── Deploy workspace (fill in your tooling) ──────────────────────────────────
   - name: "Deploy"
     domains:
@@ -258,20 +259,16 @@ workspaces:
 
           - name: "Build"
             status: "Press [Enter] to build"
-            # cmd: ["make", "build"]
-
+            # run: make build
           - name: "Test"
             status: "Press [Enter] to run tests"
-            # cmd: ["make", "test"]
-
+            # run: make test
           - name: "Deploy Staging"
             status: "Press [Enter] to deploy to staging"
-            # cmd: ["./scripts/deploy.sh", "staging"]
-
+            # run: ./scripts/deploy.sh staging
           - name: "Deploy Production"
             status: "Press [Enter] to deploy to production"
-            # cmd: ["./scripts/deploy.sh", "production"]
-
+            # run: ./scripts/deploy.sh production
           # SSH target: cmd runs on the remote host via `ssh host <cmd>`
           # host must match [a-zA-Z0-9][a-zA-Z0-9._@%-]* (no leading dash)
           # The remote shell interprets the command. A command that never exits
@@ -279,16 +276,13 @@ workspaces:
           - name: "Tail Prod Logs"
             status: "Stream live application logs from production"
             # host: "deploy@prod.example.com"
-            # cmd: ["journalctl", "-fu", "myapp"]
-
+            # run: journalctl -fu myapp
           - name: "View Logs"
             status: "Press [Enter] to stream logs"
-            # cmd: ["./scripts/logs.sh", "--tail", "100"]
-
+            # run: ./scripts/logs.sh --tail 100
           - name: "Rollback"
             status: "Press [Enter] to rollback last deploy"
-            # cmd: ["./scripts/rollback.sh"]
-
+            # run: ./scripts/rollback.sh
 # ── Alternative: simple flat config (single workspace, apps shorthand) ─────────
 #
 # domains:
@@ -307,7 +301,7 @@ workspaces:
 #       - "iTerm"
 #     targets:
 #       - name: "Git Status"
-#         cmd: ["git", "status"]
+#         run: git status
 
 # ── Include directive ──────────────────────────────────────────────────────────
 # Split large configs into multiple files. Included paths must resolve within
@@ -323,4 +317,4 @@ workspaces:
 #   - name: "Local"
 #     targets:
 #       - name: "My Command"
-#         cmd: ["echo", "hello"]
+#         run: echo hello

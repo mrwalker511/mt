@@ -145,11 +145,11 @@ domains:
     targets:
       - name: "Start Server"
         status: "Press [Enter] to start"
-        cmd: ["npm", "run", "dev"]
+        run: npm run dev
 
       - name: "Run Tests"
         status: "Press [Enter] to run tests"
-        cmd: ["npm", "test"]
+        run: npm test
 
       # Sequence: runs Build → Test → Deploy in order; stops on first failure
       - name: "Full Pipeline"
@@ -158,8 +158,19 @@ domains:
       # SSH target: runs the command on a remote host
       - name: "Deploy"
         host: "deploy@prod.example.com"
-        cmd: ["./deploy.sh", "--env", "production"]
+        run: ./deploy.sh --env production
 ```
+
+**Writing commands:** `run:` takes the command as you would type it. Quotes group words, so `run: open -a "Microsoft Word"` passes `Microsoft Word` as one argument. There is no shell behind it, so pipes, `&&`, redirects, `$VARS` and `~` are rejected when the config loads, with a message naming the target. When you need them, wrap the command in a shell explicitly:
+
+```yaml
+      - name: "Count Go files"
+        cmd: ["sh", "-c", "ls *.go | wc -l"]
+```
+
+On SSH targets (`host:` set), the `run:` string is sent to the remote shell exactly as written, so `run: journalctl -u myapp | grep -i error` works there.
+
+`cmd:` is the same thing as an explicit list (`cmd: ["git", "status"]`), handy when an argument is awkward to quote, such as a multi-line AppleScript. A target uses one or the other.
 
 **Include directive:** Split configs across files with `include:`:
 
@@ -171,7 +182,7 @@ domains:
   - name: "Personal"
     targets:
       - name: "Check Mail"
-        cmd: ["open", "-a", "Mail"]
+        run: open -a Mail
 ```
 
 Relative include paths resolve from the including file's directory. A missing or invalid include is reported as a config error (mt then falls back to the built-in defaults) rather than silently skipped.
@@ -199,14 +210,14 @@ workspaces:
       - name: "Outlook"
         targets:
           - name: "New Email"
-            cmd: ["open", "ms-outlook://compose"]
+            run: open ms-outlook://compose
             launch_msg: "Opening new email…"
   - name: "Dev"
     domains:
       - name: "Context/Git"
         targets:
           - name: "Git Status"
-            cmd: ["git", "status"]
+            run: git status
 ```
 
 See [`mt.yaml.example`](mt.yaml.example) for a full multi-workspace template with per-app actions for Outlook, Word, Excel, Edge, VS Code, and more.
