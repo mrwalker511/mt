@@ -146,6 +146,10 @@ func KeyHelp() string {
 		}
 		fmt.Fprintf(&sb, "  %-9s %s\n", b.label, b.desc)
 	}
+	sb.WriteString("\nTrackpad / mouse (off with mt --no-mouse)\n")
+	for _, g := range mouseHelp {
+		fmt.Fprintf(&sb, "  %-9s %s\n", g.gesture, g.desc)
+	}
 	sb.WriteString("\nAI prompt bar\n")
 	for _, l := range promptKeys {
 		fmt.Fprintf(&sb, "  %-9s %s\n", l[0], l[1])
@@ -158,23 +162,24 @@ func KeyHelp() string {
 var helpRows = []struct {
 	actions []action
 	text    string
+	label   string // overrides the joined key labels when they would be too wide
+	mouse   bool   // placeholder for the trackpad gestures (mouseHelp)
 }{
-	{[]action{actRun}, "Run (or run selected)"},
-	{[]action{actSelect}, "Select (multi-run)"},
-	{[]action{actCancel}, "Stop / cancel"},
-	{[]action{actAI}, "Ask AI"},
-	{[]action{actCopy, actSave}, "Copy / save output"},
-	{[]action{actClear}, "Clear output"},
-	{[]action{actUp, actDown}, "Move / scroll"},
-	{[]action{actPaneLeft, actPaneRight}, "Focus pane"},
-	{[]action{actNextPane, actPrevPane}, "Cycle panes"},
-	{[]action{actPrevWorkspace, actNextWorkspace}, "Prev / next workspace"},
-	{[]action{actJumpWorkspace}, "Go to workspace N"},
-	{[]action{actReload}, "Reload config"},
-	{[]action{actQuit}, "Quit"},
-	{[]action{actPageUp, actPageDown}, "Page output"},
-	{[]action{actTop, actBottom}, "Output top / bottom"},
-	{[]action{actHelp}, "Close this help"},
+	{actions: []action{actRun}, text: "Run (or run selected)"},
+	{actions: []action{actSelect}, text: "Select (multi-run)"},
+	{actions: []action{actCancel}, text: "Stop / cancel"},
+	{actions: []action{actAI}, text: "Ask AI"},
+	{actions: []action{actCopy, actSave}, text: "Copy / save output"},
+	{actions: []action{actClear}, text: "Clear output"},
+	{actions: []action{actUp, actDown}, text: "Move / scroll"},
+	{actions: []action{actPaneLeft, actPaneRight, actNextPane, actPrevPane}, text: "Change pane", label: "← → ⇥"},
+	{actions: []action{actPrevWorkspace, actNextWorkspace}, text: "Prev / next workspace"},
+	{actions: []action{actJumpWorkspace}, text: "Go to workspace N"},
+	{actions: []action{actReload}, text: "Reload config"},
+	{actions: []action{actQuit}, text: "Quit"},
+	{mouse: true},
+	{actions: []action{actPageUp, actPageDown, actTop, actBottom}, text: "Page / top / bottom", label: "fn ↑↓←→"},
+	{actions: []action{actHelp}, text: "Close this help"},
 }
 
 // compactHelp returns the helpRows lines that apply to the given number of
@@ -186,6 +191,12 @@ func compactHelp(workspaces int) []string {
 	}
 	var lines []string
 	for _, r := range helpRows {
+		if r.mouse {
+			for _, g := range mouseHelp {
+				lines = append(lines, fmt.Sprintf("%-7s %s", g.gesture, g.short))
+			}
+			continue
+		}
 		var labels []string
 		for _, a := range r.actions {
 			if b, ok := shown[a]; ok {
@@ -193,7 +204,11 @@ func compactHelp(workspaces int) []string {
 			}
 		}
 		if len(labels) > 0 {
-			lines = append(lines, fmt.Sprintf("%-7s %s", strings.Join(labels, " "), r.text))
+			label := strings.Join(labels, " ")
+			if r.label != "" {
+				label = r.label
+			}
+			lines = append(lines, fmt.Sprintf("%-7s %s", label, r.text))
 		}
 	}
 	return lines

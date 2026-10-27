@@ -48,6 +48,16 @@ Keys follow Mac conventions. A terminal app never receives ⌘, so each ⌘ shor
 
 Older keys still work: `y` (copy), `S` (save), `R` (reload) and `h` `j` `k` `l` (vim-style movement). Two keys changed meaning: `c` now copies (it used to clear; use `⌫`), and `Tab` now cycles panes (workspaces moved to `[` / `]`).
 
+**Trackpad and mouse:**
+
+| Gesture | Action |
+|---|---|
+| Click | Select a domain or target and focus its pane |
+| Double-click a target | Run it, like opening a file in Finder |
+| Two-finger scroll over the output | Scroll the output |
+
+While mt is running, the terminal passes clicks to mt, so click-and-drag no longer selects text in the window. To select text anyway: in **iTerm2**, hold `⌥` while dragging. In **Terminal.app**, turn off *View → Allow Mouse Reporting* while you select. Or just press `c` to copy the whole output. To turn trackpad support off, start mt with `mt --no-mouse`.
+
 In the AI prompt bar: `⌫` deletes a character, `⌥⌫` or `⌃W` deletes a word, and `⌃U` clears the line.
 
 **Terminal setup tips (macOS):**
