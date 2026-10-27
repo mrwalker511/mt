@@ -224,6 +224,7 @@
     </li>
     <li><a href="#keys">Keyboard Reference</a>
       <ul>
+        <li><a href="#keys-mouse">Trackpad and mouse</a></li>
         <li><a href="#keys-prompt">AI prompt bar</a></li>
         <li><a href="#keys-terminal">Terminal setup</a></li>
       </ul>
@@ -343,8 +344,8 @@ make build   # produces ./mt in the project root</code></pre>
 <h3 id="first-steps">First steps</h3>
 <ol>
   <li>Use <code>↑</code> / <code>↓</code> to pick a domain, then press <code>→</code> or <code>⇥</code> to move focus to the middle pane.</li>
-  <li>Use <code>↑</code> / <code>↓</code> to pick a target.</li>
-  <li>Press <code>⏎</code> Return to run it. Output appears in the right pane. Press <code>⎋</code> Esc to stop a command that keeps running.</li>
+  <li>Use <code>↑</code> / <code>↓</code> to pick a target, or just click it.</li>
+  <li>Press <code>⏎</code> Return (or double-click the target) to run it. Output appears in the right pane. Press <code>⎋</code> Esc to stop a command that keeps running.</li>
   <li>Press <code>c</code> to copy the output, just like <code>⌘C</code>.</li>
   <li>Press <code>?</code> at any time for the key reference, and <code>q</code> to quit.</li>
 </ol>
@@ -378,6 +379,21 @@ make build   # produces ./mt in the project root</code></pre>
   </tbody>
 </table>
 <p><strong>Older keys still work:</strong> <code>y</code> (copy), <code>S</code> (save), <code>R</code> (reload) and the vim-style <code>h</code> <code>j</code> <code>k</code> <code>l</code>. Two keys changed meaning in this version: <code>c</code> now copies (it used to clear; use <code>⌫</code>), and <code>Tab</code> now cycles panes (workspace switching moved to <code>[</code> / <code>]</code>).</p>
+
+<h3 id="keys-mouse">Trackpad and mouse</h3>
+<table>
+  <thead><tr><th>Gesture</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>Click</td><td>Select a domain or target and focus its pane</td></tr>
+    <tr><td>Double-click a target</td><td>Run it, like opening a file in Finder (within half a second, on the same target)</td></tr>
+    <tr><td>Two-finger scroll over the right pane</td><td>Scroll the output one line per step</td></tr>
+  </tbody>
+</table>
+<p>Clicks are ignored while the AI prompt bar or an AI command confirmation is open. Long domain and target names are cut off with <code>…</code> rather than wrapped onto a second line, so every item stays on the row you click.</p>
+<div class="callout">
+  <strong>Selecting text while mt is running</strong>
+  The terminal sends clicks to mt, so click-and-drag no longer selects text in the window. In <strong>iTerm2</strong>, hold <code>⌥</code> while dragging. In <strong>Terminal.app</strong>, turn off <em>View → Allow Mouse Reporting</em> while you select. Or press <code>c</code> to copy the whole output. Start mt with <code>mt --no-mouse</code> to turn trackpad support off entirely.
+</div>
 
 <h3 id="keys-prompt">AI prompt bar</h3>
 <table>

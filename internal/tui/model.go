@@ -129,6 +129,10 @@ type Model struct {
 	llmPending bool               // LLM request in-flight
 	llmCancel  context.CancelFunc // cancels the in-flight LLM request
 	confirmCmd []string           // non-nil when an AI-generated CMD awaits confirmation
+
+	// double-click detection for trackpad/mouse clicks on targets
+	lastClickKey string
+	lastClickAt  time.Time
 }
 
 // hasDomain reports whether the active workspace has a domain with the given name.

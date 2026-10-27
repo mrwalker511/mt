@@ -24,22 +24,9 @@ func (m Model) View() string {
 		return "Initializing…"
 	}
 
-	// Distribute usable content width across three panes, absorbing frame overhead.
-	usable := m.width - paneFrameWidth*3
-	if usable < 30 {
+	leftW, midW, rightW, contentH, ok := m.layout()
+	if !ok {
 		return "Terminal too narrow — please resize."
-	}
-
-	leftW := usable * 20 / 100
-	if leftW < 14 {
-		leftW = 14
-	}
-	midW := usable * 38 / 100
-	rightW := usable - leftW - midW
-
-	contentH := m.height - statusBarHeight - borderHeight
-	if contentH < 1 {
-		contentH = 1
 	}
 
 	body := lipgloss.JoinHorizontal(
@@ -69,6 +56,30 @@ func (m Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, body, bar)
 }
 
+// layout returns the inner width (including padding) of each pane and the
+// content height shared by all three. ok is false when the terminal is too
+// narrow to draw the panes. Mouse hit-testing uses the same numbers.
+func (m Model) layout() (leftW, midW, rightW, contentH int, ok bool) {
+	// Distribute usable content width across three panes, absorbing frame overhead.
+	usable := m.width - paneFrameWidth*3
+	if usable < 30 {
+		return 0, 0, 0, 0, false
+	}
+	// The domain pane grows to fit the longest name (plus the "> " prefix and
+	// padding), between 20% and 30% of the width, taking the space from the
+	// target pane so the output pane keeps its share.
+	base := usable * 20 / 100
+	leftW = base
+	for _, d := range m.domains {
+		leftW = max(leftW, lipgloss.Width(d.Name)+4)
+	}
+	leftW = max(min(leftW, usable*30/100), 14)
+	midW = usable*38/100 - max(leftW-base, 0)
+	rightW = usable - leftW - midW
+	contentH = max(m.height-statusBarHeight-borderHeight, 1)
+	return leftW, midW, rightW, contentH, true
+}
+
 func (m Model) renderLeftPane(w, h int) string {
 	focused := m.activePane == paneLeft
 	titleText := "DOMAINS"
@@ -76,7 +87,7 @@ func (m Model) renderLeftPane(w, h int) string {
 		titleText = "DOMAINS — " + m.allWorkspaces[m.workspaceIdx].Name
 	}
 	title := titleStyle.Render(titleText)
-	items := m.renderList(m.domainNames(), m.domainCursor, focused)
+	items := m.renderList(m.domainNames(), m.domainCursor, focused, w)
 	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, items))
 }
 
@@ -84,7 +95,7 @@ func (m Model) renderMiddlePane(w, h int) string {
 	focused := m.activePane == paneMiddle
 	title := titleStyle.Render("TARGETS & ACTIONS")
 	names := m.targetNamesWithBadges()
-	items := m.renderList(names, m.targetCursor, focused)
+	items := m.renderList(names, m.targetCursor, focused, w)
 	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, items))
 }
 
@@ -161,6 +172,18 @@ func (m Model) renderHelp() string {
 	return strings.Join(lines, "\n")
 }
 
+// truncate shortens s to at most width display cells, ending in "…" when cut.
+func truncate(s string, width int) string {
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	runes := []rune(s)
+	for len(runes) > 0 && lipgloss.Width(string(runes))+1 > width {
+		runes = runes[:len(runes)-1]
+	}
+	return string(runes) + "…"
+}
+
 // displayCmd returns the target's command as the user would type it: the run:
 // string as written, or the cmd: list with arguments containing spaces quoted.
 func displayCmd(t Target) string {
@@ -217,15 +240,17 @@ func (m Model) domainLiveHeader() string {
 	return ""
 }
 
-// renderList builds a styled string for a selectable list of items.
-func (m Model) renderList(items []string, cursor int, paneActive bool) string {
+// renderList builds a styled string for a selectable list of items. Each item
+// is cut to one line of the pane's width w so that row i is always on screen
+// row i, which mouse clicks rely on.
+func (m Model) renderList(items []string, cursor int, paneActive bool, w int) string {
 	var sb strings.Builder
 	for i, item := range items {
 		prefix := "  "
 		if i == cursor {
 			prefix = "> "
 		}
-		label := prefix + item
+		label := truncate(prefix+item, w-paneStyle(false).GetHorizontalPadding())
 
 		var s lipgloss.Style
 		switch {

@@ -213,6 +213,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.MouseMsg:
+		// The prompt bar and the AI confirmation take the keyboard; ignore the
+		// pointer meanwhile so a stray click cannot change the selection.
+		if m.inputMode || m.confirmCmd != nil {
+			return m, nil
+		}
+		return m.handleMouse(msg)
+
 	case tea.KeyMsg:
 		// Input mode: capture all keystrokes for the AI prompt bar.
 		if m.inputMode {
