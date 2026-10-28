@@ -284,7 +284,7 @@ func TestLoadWorkspaces_Include_CycleGuard(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir) // includes must resolve within $HOME
 
-	// a.yaml includes b.yaml which includes a.yaml — should not loop.
+	// a.yaml includes b.yaml which includes a.yaml, which should not loop.
 	aPath := filepath.Join(dir, "a.yaml")
 	bPath := filepath.Join(dir, "b.yaml")
 	a := "include:\n  - b.yaml\ndomains:\n  - name: A\n    targets:\n      - name: TA\n"
@@ -535,6 +535,8 @@ domains:
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
+	orig, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(orig) }) //nolint:errcheck
 	_ = os.Chdir(dir)
 	_, llmCfg, err := LoadWorkspaces()
 	if err != nil {

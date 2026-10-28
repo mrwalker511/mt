@@ -26,7 +26,7 @@ func (m Model) View() string {
 
 	leftW, midW, rightW, contentH, ok := m.layout()
 	if !ok {
-		return "Terminal too narrow — please resize."
+		return "Terminal too narrow, please resize."
 	}
 
 	body := lipgloss.JoinHorizontal(
@@ -84,18 +84,19 @@ func (m Model) renderLeftPane(w, h int) string {
 	focused := m.activePane == paneLeft
 	titleText := "DOMAINS"
 	if len(m.allWorkspaces) > 1 && m.allWorkspaces[m.workspaceIdx].Name != "" {
-		titleText = "DOMAINS — " + m.allWorkspaces[m.workspaceIdx].Name
+		titleText = "DOMAINS: " + m.allWorkspaces[m.workspaceIdx].Name
 	}
-	title := titleStyle.Render(titleText)
-	items := m.renderList(m.domainNames(), m.domainCursor, focused, w)
+	names := m.domainNames()
+	title := titleStyle.Render(titleText + m.listPosition(m.domainCursor, len(names)))
+	items := m.renderList(names, m.domainCursor, m.domainTop, focused, w)
 	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, items))
 }
 
 func (m Model) renderMiddlePane(w, h int) string {
 	focused := m.activePane == paneMiddle
-	title := titleStyle.Render("TARGETS & ACTIONS")
 	names := m.targetNamesWithBadges()
-	items := m.renderList(names, m.targetCursor, focused, w)
+	title := titleStyle.Render("TARGETS & ACTIONS" + m.listPosition(m.targetCursor, len(names)))
+	items := m.renderList(names, m.targetCursor, m.targetTop, focused, w)
 	return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, items))
 }
 
@@ -107,28 +108,26 @@ func (m Model) renderRightPane(w, h int) string {
 		return renderPane(focused, w, h, lipgloss.JoinVertical(lipgloss.Left, title, m.renderHelp()))
 	}
 
-	var text string
+	var sections []string
 	switch {
 	case m.confirmCmd != nil:
-		text = normalItemStyle.Render("AI wants to run:\n\n  " + strings.Join(m.confirmCmd, " ") + "\n\n[Enter] confirm  ·  [Esc] cancel")
-	case m.running:
-		text = dimItemStyle.Render("Running…")
-	case m.cmdErr != "" && m.output != "":
-		text = m.renderScrollableOutput(m.output) + "\n\n" + errorStyle.Render("Error: "+m.cmdErr)
-	case m.cmdErr != "":
-		text = errorStyle.Render("Error: " + m.cmdErr)
+		sections = append(sections, normalItemStyle.Render("AI wants to run:\n\n  "+strings.Join(m.confirmCmd, " ")+"\n\n⏎ confirm  ·  ⎋ cancel"))
 	case m.output != "":
-		text = m.renderScrollableOutput(m.output)
-	default:
+		sections = append(sections, m.renderScrollableOutput(m.output))
+	case !m.running && m.cmdErr == "":
 		status := "Select a target to view status."
-		if m.domainCursor < len(m.domains) {
-			targets := m.domains[m.domainCursor].Targets
-			if len(targets) > 0 && m.targetCursor < len(targets) {
-				status = targets[m.targetCursor].Status
-			}
+		if t, ok := m.currentTarget(); ok {
+			status = t.Status
 		}
-		text = normalItemStyle.Render(status)
+		sections = append(sections, normalItemStyle.Render(status))
 	}
+	if m.running && m.confirmCmd == nil {
+		sections = append(sections, dimItemStyle.Render(m.runBanner()))
+	}
+	if m.cmdErr != "" && m.confirmCmd == nil {
+		sections = append(sections, errorStyle.Render("Error: "+m.cmdErr))
+	}
+	text := strings.Join(sections, "\n\n")
 
 	parts := []string{title}
 	if header := m.domainLiveHeader(); header != "" {
@@ -185,65 +184,85 @@ func truncate(s string, width int) string {
 }
 
 // displayCmd returns the target's command as the user would type it: the run:
-// string as written, or the cmd: list with arguments containing spaces quoted.
+// string as written (or the cmd: list, quoted where needed), with any dir: as
+// a leading cd and any host: as a leading ssh.
 func displayCmd(t Target) string {
-	if t.Run != "" {
-		if t.Host != "" {
-			return "ssh " + t.Host + " " + t.Run
-		}
-		return t.Run
+	cmd := t.Run
+	if cmd == "" {
+		cmd = quoteArgs(t.Cmd)
 	}
-	parts := effectiveCmd(t)
-	out := make([]string, len(parts))
-	for i, p := range parts {
-		if p == "" || strings.ContainsAny(p, " \t\n'\"") {
-			p = "'" + strings.ReplaceAll(p, "'", `'\''`) + "'"
+	if t.Dir != "" {
+		dir := quoteArgs([]string{t.Dir})
+		if t.Host != "" {
+			dir = remoteDir(t.Dir)
 		}
-		out[i] = p
+		cmd = "cd " + dir + " && " + cmd
+	}
+	if t.Host != "" {
+		cmd = "ssh " + t.Host + " " + cmd
+	}
+	return cmd
+}
+
+// quoteArgs joins args with spaces, single-quoting any that need it.
+func quoteArgs(args []string) string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		if a == "" || strings.ContainsAny(a, " \t\n'\"") {
+			a = shellQuote(a)
+		}
+		out[i] = a
 	}
 	return strings.Join(out, " ")
 }
 
-// domainLiveHeader returns a styled one-liner of live probe data for the current
-// domain, or "" if no live data is available for that domain.
-func (m Model) domainLiveHeader() string {
-	if m.domainCursor >= len(m.domains) {
-		return ""
-	}
-	switch m.domains[m.domainCursor].Name {
-	case "Context/Git":
-		branch := m.liveStatus["git.branch"]
-		if branch == "" {
-			return ""
-		}
-		label := "Branch: " + branch
-		if dirty := m.liveStatus["git.dirty"]; dirty != "" {
-			label += "  (" + dirty + ")"
-		}
-		return liveHeaderStyle.Render(label)
-
-	case "Infrastructure":
-		pg := m.liveStatus["docker.postgres"]
-		rd := m.liveStatus["docker.redis"]
-		if pg == "" && rd == "" {
-			return ""
-		}
-		var parts []string
-		if pg != "" {
-			parts = append(parts, "postgres: "+pg)
-		}
-		if rd != "" {
-			parts = append(parts, "redis: "+rd)
-		}
-		return liveHeaderStyle.Render(strings.Join(parts, "  |  "))
-	}
-	return ""
+// listRows is how many list items fit under a pane's title.
+func (m Model) listRows() int {
+	_, _, _, contentH, _ := m.layout()
+	return max(contentH-(listTopRow-1), 1)
 }
 
-// renderList builds a styled string for a selectable list of items. Each item
-// is cut to one line of the pane's width w so that row i is always on screen
-// row i, which mouse clicks rely on.
-func (m Model) renderList(items []string, cursor int, paneActive bool, w int) string {
+// scrollIntoView returns the first visible index of a list of n items, moved
+// as little as possible from top so that cursor is on screen.
+func scrollIntoView(top, cursor, n, rows int) int {
+	if cursor < top {
+		top = cursor
+	}
+	if cursor >= top+rows {
+		top = cursor - rows + 1
+	}
+	return min(max(top, 0), max(n-rows, 0))
+}
+
+// syncListTops keeps the remembered first visible row of each list in step
+// with its cursor and the window size. Update calls it after every message.
+func (m Model) syncListTops() Model {
+	rows := m.listRows()
+	m.domainTop = scrollIntoView(m.domainTop, m.domainCursor, len(m.domains), rows)
+	n := 0
+	if m.domainCursor < len(m.domains) {
+		n = len(m.domains[m.domainCursor].Targets)
+	}
+	m.targetTop = scrollIntoView(m.targetTop, m.targetCursor, n, rows)
+	return m
+}
+
+// listPosition returns " (3/40)" for a list too long to show at once, so the
+// title tells you there is more above or below; otherwise "".
+func (m Model) listPosition(cursor, n int) string {
+	if n <= m.listRows() {
+		return ""
+	}
+	return fmt.Sprintf(" (%d/%d)", cursor+1, n)
+}
+
+// renderList builds a styled string for the visible part of a selectable list,
+// starting at item top. Each item is cut to one line of the pane's width w so
+// that item i is on screen row listTopRow+i-top, which mouse clicks rely on.
+func (m Model) renderList(items []string, cursor, top int, paneActive bool, w int) string {
+	top = scrollIntoView(top, cursor, len(items), m.listRows())
+	items = items[top:min(top+m.listRows(), len(items))]
+	cursor -= top
 	var sb strings.Builder
 	for i, item := range items {
 		prefix := "  "
@@ -306,19 +325,36 @@ func (m Model) domainNames() []string {
 
 // renderScrollableOutput renders output text with scrolling when it exceeds the page size.
 func (m Model) renderScrollableOutput(output string) string {
-	lines := strings.Split(output, "\n")
+	total := strings.Count(output, "\n") + 1
 	pageSize := m.rightPanePageSize()
-	if len(lines) <= pageSize {
+	if total <= pageSize {
 		return normalItemStyle.Render(output)
 	}
 	// Clamp so a stale offset (output replaced, window resized) can never index
-	// past the end of lines.
-	offset := min(max(m.scrollOffset, 0), len(lines)-pageSize)
-	visible := strings.Join(lines[offset:offset+pageSize], "\n")
-	var sb strings.Builder
-	sb.WriteString(normalItemStyle.Render(visible))
-	sb.WriteString("\n")
-	sb.WriteString(dimItemStyle.Render(fmt.Sprintf(
-		"  ── %d/%d lines  [j↓ k↑] ──", offset+1, len(lines))))
-	return sb.String()
+	// past the end. Only the visible lines are cut out, so a long streaming
+	// output is not split into lines on every redraw.
+	offset := min(max(m.scrollOffset, 0), total-pageSize)
+	visible := lineWindow(output, offset, pageSize)
+	return normalItemStyle.Render(visible) + "\n" + dimItemStyle.Render(fmt.Sprintf(
+		"  ── %d/%d lines  [↑↓ fn↑↓] ──", offset+1, total))
+}
+
+// lineWindow returns n lines of s starting at line offset (0-based).
+func lineWindow(s string, offset, n int) string {
+	for ; offset > 0; offset-- {
+		i := strings.IndexByte(s, '\n')
+		if i < 0 {
+			return ""
+		}
+		s = s[i+1:]
+	}
+	end := 0
+	for ; n > 0; n-- {
+		i := strings.IndexByte(s[end:], '\n')
+		if i < 0 {
+			return s
+		}
+		end += i + 1
+	}
+	return s[:end-1]
 }

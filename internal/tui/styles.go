@@ -13,7 +13,7 @@ const (
 )
 
 // paneStyle returns a border+padding style with color reflecting focus state.
-// Width and Height are NOT set here — callers apply .Width(w).Height(h) so
+// Width and Height are NOT set here: callers apply .Width(w).Height(h) so
 // layout computation stays in view.go.
 func paneStyle(focused bool) lipgloss.Style {
 	borderColor := colorUnfocused

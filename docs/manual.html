@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mt — User Manual</title>
+  <title>mt: User Manual</title>
   <style>
     :root {
       --bg:       #0f1117;
@@ -232,6 +232,7 @@
     <li><a href="#config">Configuration</a>
       <ul>
         <li><a href="#config-locations">File locations</a></li>
+        <li><a href="#config-trust">Folder trust</a></li>
         <li><a href="#config-structure">YAML structure</a></li>
         <li><a href="#config-run">Writing commands</a></li>
         <li><a href="#config-fields">Field reference</a></li>
@@ -274,7 +275,7 @@
 <!-- ── Main content ───────────────────────────────────────────────────── -->
 <main>
 
-<h1>mt — User Manual<span class="tagline">A keyboard-driven terminal workspace launcher</span></h1>
+<h1>mt: User Manual<span class="tagline">A keyboard-driven terminal workspace launcher</span></h1>
 
 <!-- ── Overview ─────────────────────────────────────────────────────── -->
 <h2 id="overview">Overview <a class="anchor" href="#overview">#</a></h2>
@@ -283,13 +284,19 @@
 <ul>
   <li>Launch macOS apps without leaving the terminal</li>
   <li>Run Docker compose, git, and dev-server commands from a single interface</li>
-  <li>Trigger multi-step deploy pipelines as a <em>sequence</em> — Build → Test → Deploy</li>
+  <li>Trigger multi-step deploy pipelines as a <em>sequence</em>: Build → Test → Deploy</li>
   <li>Run multiple commands in <em>parallel</em> with Space + Enter</li>
   <li>Execute commands on remote servers over SSH</li>
 </ul>
 
 <!-- ── Installation ─────────────────────────────────────────────────── -->
 <h2 id="install">Installation <a class="anchor" href="#install">#</a></h2>
+
+<h3 id="install-release">Download a release</h3>
+<p>Each tagged release on the <a href="https://github.com/mrwalker511/mt/releases">GitHub releases page</a> has ready-built archives for macOS (Apple Silicon and Intel) and Linux (x86-64 and ARM64), plus a <code>checksums.txt</code>. The macOS Apple Silicon archive also contains <code>mt-apple-bridge</code>.</p>
+<pre><code>tar -xzf mt-v1.0.0-darwin-arm64.tar.gz
+sudo install -m 0755 mt-v1.0.0-darwin-arm64/mt /usr/local/bin/mt
+mt --version</code></pre>
 
 <h3 id="install-go">go install</h3>
 <p>Requires Go 1.25 or later (the version in <code>go.mod</code>).</p>
@@ -304,7 +311,8 @@ make build   # produces ./mt in the project root</code></pre>
 <table>
   <thead><tr><th>Command</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><code>make build</code></td><td>Compile binary to <code>./mt</code></td></tr>
+    <tr><td><code>make build</code></td><td>Compile binary to <code>./mt</code>, stamped with the version from <code>git describe</code> (shown by <code>mt --version</code>)</td></tr>
+    <tr><td><code>make check</code></td><td>Run the same checks as CI: gofmt, <code>go vet</code>, staticcheck, and tests with the race detector</td></tr>
     <tr><td><code>make install</code></td><td>Install <code>mt</code> to <code>/usr/local/bin/mt</code></td></tr>
     <tr><td><code>make test</code></td><td>Run test suite</td></tr>
     <tr><td><code>make vet</code></td><td>Run <code>go vet</code></td></tr>
@@ -336,9 +344,9 @@ make build   # produces ./mt in the project root</code></pre>
  ⏎ Run  ␣ Select  ⇥ Pane  / Ask AI  c Copy  ⌫ Clear  ? Keys  q Quit</span></div>
 
 <ul>
-  <li><strong>Left pane</strong> — Domain list. Arrow keys or <code>j</code>/<code>k</code> move the cursor. Domains group related targets (e.g. "Outlook", "Infrastructure", "Context/Git").</li>
-  <li><strong>Middle pane</strong> — Target list for the selected domain. Press <code>Enter</code> to run, <code>Space</code> to toggle multi-select.</li>
-  <li><strong>Right pane</strong> — Command output, live status header, and hints. Scroll with <code>j</code>/<code>k</code> when focused here.</li>
+  <li><strong>Left pane</strong>: Domain list. Arrow keys or <code>j</code>/<code>k</code> move the cursor. Domains group related targets (e.g. "Outlook", "Infrastructure", "Context/Git").</li>
+  <li><strong>Middle pane</strong>: Target list for the selected domain. Press <code>Enter</code> to run, <code>Space</code> to toggle multi-select.</li>
+  <li><strong>Right pane</strong>: Command output, live status header, and hints. Scroll with <code>j</code>/<code>k</code> when focused here.</li>
 </ul>
 
 <h3 id="first-steps">First steps</h3>
@@ -378,6 +386,7 @@ make build   # produces ./mt in the project root</code></pre>
     <tr><td><code>q</code> / <code>⌃C</code></td><td>Any</td><td>Quit (cancels any running commands)</td><td>⌘Q</td></tr>
   </tbody>
 </table>
+<p><strong>Long lists scroll.</strong> When a domain has more targets than fit, the list scrolls to keep the cursor in view and the pane title shows where you are, e.g. <em>TARGETS &amp; ACTIONS (12/40)</em>.</p>
 <p><strong>Older keys still work:</strong> <code>y</code> (copy), <code>S</code> (save), <code>R</code> (reload) and the vim-style <code>h</code> <code>j</code> <code>k</code> <code>l</code>. Two keys changed meaning in this version: <code>c</code> now copies (it used to clear; use <code>⌫</code>), and <code>Tab</code> now cycles panes (workspace switching moved to <code>[</code> / <code>]</code>).</p>
 
 <h3 id="keys-mouse">Trackpad and mouse</h3>
@@ -418,15 +427,15 @@ make build   # produces ./mt in the project root</code></pre>
 <h2 id="config">Configuration <a class="anchor" href="#config">#</a></h2>
 
 <h3 id="config-locations">File locations</h3>
-<p><code>mt</code> searches for a config file in this order, stopping at the first match:</p>
+<p><code>mt</code> uses the first of these that exists:</p>
 <ol>
-  <li><strong>System config dir</strong> (platform-dependent):
+  <li><strong>Folder config:</strong> <code>./mt.yaml</code> in the folder you start mt from, <em>if that folder is trusted</em> (see below).</li>
+  <li><strong>User config</strong> (platform-dependent):
     <ul>
       <li><span class="badge macos">macOS</span> &nbsp;<code>~/Library/Application Support/mt/config.yaml</code></li>
       <li><span class="badge linux">Linux</span> &nbsp;<code>~/.config/mt/config.yaml</code></li>
     </ul>
   </li>
-  <li><strong>Local override</strong> — <code>./mt.yaml</code> in the current working directory</li>
 </ol>
 <p>If neither exists, built-in defaults are used. To create your own config:</p>
 <pre><code># macOS
@@ -437,9 +446,15 @@ cp mt.yaml.example ~/Library/Application\ Support/mt/config.yaml
 mkdir -p ~/.config/mt
 cp mt.yaml.example ~/.config/mt/config.yaml</code></pre>
 
+<h3 id="config-trust">Trusting a folder's <code>./mt.yaml</code></h3>
+<p>A <code>./mt.yaml</code> can run any command, so mt only loads one from a folder you have trusted, much like VS Code's workspace trust. Without that, cloning a repository and starting mt inside it could hand your keyboard to whoever wrote the repository's <code>mt.yaml</code>.</p>
+<pre><code>cd ~/projects/myapp
+mt --trust      # mt will now load ./mt.yaml here
+mt --untrust    # stop trusting this folder</code></pre>
+<p>In a folder that is not trusted, mt ignores <code>./mt.yaml</code>, loads your user config instead, and shows <em>"Ignored ./mt.yaml: this folder is not trusted"</em>. Trusted folders are listed one per line in <code>~/.mt/trusted</code> (readable only by you); symlinks are resolved, so a folder is recognised however you reach it. Trust is per folder, not per file version, so editing a trusted <code>mt.yaml</code> (and pressing <code>r</code>) keeps working.</p>
 <div class="callout warn">
-  <strong>Local override caution</strong>
-  A <code>./mt.yaml</code> in the current directory overrides the system config. Only run <code>mt</code> inside directories you trust. Config files must not be world-writable — mt will refuse to load them if they are.
+  <strong>World-writable files are refused</strong>
+  Config files, including included ones, must not be world-writable. mt refuses to load them if they are.
 </div>
 
 <h3 id="config-structure">YAML structure</h3>
@@ -499,13 +514,17 @@ workspaces:
     <tr><td><code>cmd</code></td><td>No</td><td>The same command as an explicit YAML list: <code>["git", "status"]</code>. Use it when an argument is awkward to quote. A target sets <code>run</code> or <code>cmd</code>, not both.</td></tr>
     <tr><td><code>status</code></td><td>No</td><td>Hint text shown in the right pane before the command has been run. Supports newlines.</td></tr>
     <tr><td><code>launch_msg</code></td><td>No</td><td>Message shown when the command exits successfully with no output (e.g. <code>open -a</code> produces no stdout).</td></tr>
+    <tr><td><code>dir</code></td><td>No</td><td>Working directory for the command. <code>~/</code> expands to your home folder; a relative path is relative to the folder you started mt in. On SSH targets it is the remote directory (mt runs <code>cd &lt;dir&gt; &amp;&amp; &lt;command&gt;</code> there).</td></tr>
     <tr><td><code>host</code></td><td>No</td><td>SSH host in <code>[user@]hostname</code> form. If set, the command runs as <code>ssh host &lt;command&gt;</code>. See <a href="#feat-ssh">SSH targets</a>.</td></tr>
     <tr><td><code>sequence</code></td><td>No</td><td>Ordered list of target names to run in series. If any step fails, the sequence stops. See <a href="#feat-sequence">Sequence</a>.</td></tr>
+    <tr><td><code>live</code></td><td>No</td><td>Domain-level. A command, written like <code>run:</code>, whose output is shown above the right pane while the domain is selected. See <a href="#feat-live">Live status</a>.</td></tr>
     <tr><td><code>apps</code></td><td>No</td><td>Domain-level, macOS only. List of app names; each expands to an <code>open -a</code> target. Shorthand for common launchers. See <a href="#config-apps">Apps shorthand</a>.</td></tr>
     <tr><td><code>include</code></td><td>No</td><td>Top-level. List of YAML file paths to merge into this config. See <a href="#config-include">Include directive</a>.</td></tr>
     <tr><td><code>llm</code></td><td>No</td><td>Top-level. AI assistant provider settings. See <a href="#config-llm">LLM configuration</a>.</td></tr>
   </tbody>
 </table>
+
+<p><strong>Typos are caught.</strong> An unknown key is a config error naming the file, line and key, with a suggestion when one is close, e.g. <em>"mt.yaml: line 6: unknown key "comand" (did you mean "cmd"?)"</em>. A config with an error falls back to the built-in defaults (or, on reload, keeps the previous config) and shows the message.</p>
 
 <h3 id="config-workspaces">Multi-workspace</h3>
 <p>Wrap your domains in a <code>workspaces:</code> block to switch between independent contexts with <code>[</code> / <code>]</code>, or jump straight to one with <code>1</code>–<code>9</code> (in config order). Each workspace has its own domains, targets, run history, and output cache.</p>
@@ -562,9 +581,9 @@ domains:
 <h2 id="features">Features <a class="anchor" href="#features">#</a></h2>
 
 <h3 id="feat-single">Single command</h3>
-<p>The default mode. Navigate to any target with a <code>run:</code> or <code>cmd:</code> field and press <code>Enter</code>. The command runs asynchronously; the right pane shows output when it completes. While a command runs, the right pane shows <em>Running…</em> and <code>Enter</code> is ignored. Press <code>Esc</code> to stop it (useful for commands that never exit on their own, such as <code>tail -f</code>).</p>
-<p>You can move to other targets while a command runs. When it finishes, its output is filed under the target that ran it, so you see it when you return to that target.</p>
-<p>Output (stdout and stderr combined) is capped at 1 MB while the command runs; anything beyond that is discarded and a truncation notice is appended. Commands run without a terminal and with stdin closed, so interactive prompts will not work.</p>
+<p>The default mode. Navigate to any target with a <code>run:</code> or <code>cmd:</code> field and press <code>Enter</code>. Output appears in the right pane <strong>as the command produces it</strong>, with a banner such as <em>Running… 12s ⎋ stop</em> underneath. The view follows new output like a terminal does; scroll up to read earlier lines and it stays where you put it. <code>Enter</code> is ignored while a command runs. Press <code>Esc</code> to stop it (useful for commands that never exit on their own, such as <code>tail -f</code>).</p>
+<p>You can move to other targets while a command runs; the banner then names the running target. When it finishes, its output is filed under the target that ran it, so you see it when you return to that target.</p>
+<p>Output (stdout and stderr combined) is capped at 1 MB while the command runs; anything beyond that is discarded and a truncation notice is appended. Commands run without a terminal and with stdin closed, so interactive prompts will not work. If a command prints nothing and succeeds, the target's <code>launch_msg</code> is shown (or <em>"(command completed, no output)"</em>).</p>
 
 <h3 id="feat-sequence">Sequence</h3>
 <p>A target with a <code>sequence:</code> field executes named targets in order. If any step exits non-zero, the sequence stops immediately.</p>
@@ -580,11 +599,11 @@ domains:
         run: make test
       - name: "Deploy"
         run: ./scripts/deploy.sh production</code></pre>
-<p>Output from all completed steps is concatenated and shown in the right pane when the sequence finishes (or fails). Step names are looked up across every domain in the current workspace. Rules:</p>
+<p>Output streams into the right pane as each step runs, with a <code>▶ Step name</code> line before each step. Rules:</p>
 <ul>
-  <li>If a step name does not match any target (e.g. a typo), the sequence refuses to start and names the missing step, so a pipeline can never silently skip <em>Test</em> and go straight to <em>Deploy</em>.</li>
-  <li>A step with no <code>run:</code>/<code>cmd:</code> (including a step that is itself a sequence) produces an error and stops the sequence.</li>
-  <li>If two targets share a step's name, the one in the last domain wins. Keep step names unique.</li>
+  <li><strong>Checked before anything runs.</strong> If a step name matches no target (e.g. a typo), a step has no <code>run:</code>/<code>cmd:</code>, or a step is itself a sequence (nesting is not supported), the sequence refuses to start and says which step is wrong. A pipeline can never silently skip <em>Test</em> and go straight to <em>Deploy</em>.</li>
+  <li><strong>Name lookup:</strong> a step is looked up in the sequence's own domain first, then in the workspace's other domains in order.</li>
+  <li><strong>Stops at the first failure.</strong> The error names the step, e.g. <em>step "Test": exit status 1</em>.</li>
   <li><code>Esc</code> stops the current step and the rest of the sequence.</li>
 </ul>
 
@@ -595,7 +614,7 @@ domains:
   <li>Press <code>Space</code> to toggle each target you want to run. A <code>◆</code> marker appears before selected targets.</li>
   <li>Press <code>Enter</code> to run all selected targets in parallel.</li>
 </ol>
-<p>When all commands complete, output is shown with <code>=== Target Name ===</code> headers so you can identify each result, and each target gets its own ✓/✗ badge. Selection is cleared automatically after execution. Targets without a command (including sequence targets) are skipped in a parallel run. <code>Esc</code> stops all of them.</p>
+<p>Each target's output streams in under a <code>=== Target Name ===</code> header (a <code>…</code> marks one still running), the banner shows how many have finished, and each target gets its own ✓/✗ badge. Sequence targets can be selected too: their steps run in order while the other targets run alongside. If any selected target cannot run (no command, or a sequence with a bad step), nothing starts and the error names each problem; the selection is kept so you can fix it. After a run the selection is cleared. <code>Esc</code> stops all of them.</p>
 
 <h3 id="feat-ssh">SSH targets</h3>
 <p>Set the <code>host:</code> field to run a command on a remote server:</p>
@@ -610,7 +629,7 @@ domains:
       - name: "Tail Logs"
         host: "app@prod.example.com"
         run: journalctl -fu myapp</code></pre>
-<p>With <code>host:</code> set, mt runs <code>ssh host &lt;cmd&gt;</code>. SSH uses your existing key configuration (<code>~/.ssh/config</code>, <code>ssh-agent</code>). No credentials are stored by mt. Commands that never exit, like the <code>journalctl -f</code> example above, keep running until you press <code>Esc</code>.</p>
+<p>With <code>host:</code> set, mt runs <code>ssh -o BatchMode=yes host &lt;command&gt;</code>. SSH uses your existing key configuration (<code>~/.ssh/config</code>, <code>ssh-agent</code>); no credentials are stored by mt. <code>BatchMode</code> means ssh never waits for a password or passphrase that mt has no way to show: it fails straight away with a message such as <em>Permission denied (publickey)</em> instead of hanging. Load your key into the agent first (<code>ssh-add</code>). Set <code>dir:</code> to run the command in a remote directory. Commands that never exit, like the <code>journalctl -f</code> example above, keep running until you press <code>Esc</code>.</p>
 <div class="callout warn">
   <strong>The remote shell interprets the command</strong>
   On an SSH target, the <code>run:</code> string is sent to the remote machine exactly as written, just as if you had typed it after <code>ssh host</code>. The remote shell interprets it, so pipes, quotes, globs and <code>$VARS</code> work there (e.g. <code>run: journalctl -u myapp | grep -i error</code>), and mt's local shell-syntax check does not apply. With <code>cmd:</code>, ssh joins the list with spaces before sending it, so you must add remote quoting yourself (<code>cmd: ["ls", "'My Dir'"]</code>). Prefer <code>run:</code> for SSH targets.
@@ -620,24 +639,21 @@ domains:
   The <code>host:</code> value must match <code>[a-zA-Z0-9][a-zA-Z0-9._@%-]*</code>. Values starting with <code>-</code> or containing spaces are rejected at config load time to prevent SSH option injection.
 </div>
 
-<h3 id="feat-live">Live status polling</h3>
-<p>When the active workspace contains certain named domains, mt polls for live status every 5 seconds and shows it in the right-pane header:</p>
-<table>
-  <thead><tr><th>Domain name</th><th>What is polled</th><th>Display</th></tr></thead>
-  <tbody>
-    <tr>
-      <td><code>Context/Git</code></td>
-      <td><code>git rev-parse --abbrev-ref HEAD</code><br><code>git status --porcelain</code></td>
-      <td>Current branch + modified file count</td>
-    </tr>
-    <tr>
-      <td><code>Infrastructure</code></td>
-      <td><code>docker ps --filter name=postgres</code><br><code>docker ps --filter name=redis</code></td>
-      <td>Container status for postgres and redis</td>
-    </tr>
-  </tbody>
-</table>
-<p>Polling only runs for domains present in the current workspace and stops when you quit (all in-flight probes are cancelled). Each probe has a 3-second timeout — on a slow machine or when Docker Desktop is stopped, polls complete quickly rather than blocking the UI.</p>
+<h3 id="feat-live">Live status</h3>
+<p>Give a domain a <code>live:</code> command and its output appears above the right pane whenever that domain is selected:</p>
+<pre><code>domains:
+  - name: "Context/Git"
+    live: git status --short --branch
+    targets: [...]
+  - name: "Infrastructure"
+    live: docker ps --format "{{.Names}} {{.Status}}"
+    targets: [...]</code></pre>
+<ul>
+  <li><code>live:</code> is written like <code>run:</code> (quotes group words, no shell). Use <code>sh -c '...'</code> if you need a pipe.</li>
+  <li>The first 3 non-empty lines of its standard output are shown. If it fails or takes more than 3 seconds, the header is hidden.</li>
+  <li>Only the selected domain is polled: once when you select it, then every 5 seconds. A poll never starts while the previous one is still running, so a slow command (Docker Desktop stopped, a big repository) cannot pile up processes.</li>
+</ul>
+<p>The built-in <em>Context/Git</em> domain shows <em>Branch: main (3 modified)</em> and the built-in <em>Infrastructure</em> domain lists running Docker containers. In your own config, domain names have no special meaning: add <code>live:</code> to whichever domains should have a header.</p>
 
 <h3 id="feat-output">Output management</h3>
 <p>After a command runs, its output is shown in the right pane. Per-target output is cached in memory so navigating away and returning restores the previous result.</p>
@@ -680,7 +696,7 @@ domains:
 <h2 id="config-llm">LLM configuration <a class="anchor" href="#config-llm">#</a></h2>
 <p>The AI assistant supports five providers: <strong>LiteLLM</strong> (local proxy, default), <strong>llama.cpp</strong> (Metal-accelerated GGUF), <strong>MLX</strong> (Apple Silicon native, fastest), <strong>OpenAI</strong> (cloud), and <strong>Apple Foundation Models</strong> (on-device, macOS 26+). All providers except Apple speak the OpenAI <code>/v1/chat/completions</code> API. Switch with a single <code>provider:</code> line in your config.</p>
 
-<h3 id="llm-litellm">LiteLLM proxy (default — port 4000)</h3>
+<h3 id="llm-litellm">LiteLLM proxy (default: port 4000)</h3>
 <p>LiteLLM acts as a unified gateway in front of any model backend (Ollama, vLLM, cloud APIs, etc.).</p>
 <pre><code>pip install litellm
 
@@ -689,7 +705,7 @@ litellm --model ollama/llama3.1:8b
 # or
 litellm --model gpt-4o-mini   # requires OPENAI_API_KEY in env</code></pre>
 <pre><code>llm:
-  provider: litellm           # or omit — litellm is the default
+  provider: litellm           # or omit: litellm is the default
   model: llama3.1:8b
   # base_url: http://localhost:4000   # default</code></pre>
 
@@ -713,24 +729,24 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
 </table>
 <p>Gemma 4 model size guide for 36 GB unified memory:</p>
 <ul>
-  <li><code>gemma-4-27b-it-Q4_K_M.gguf</code> (~16 GB) — best speed/quality balance</li>
-  <li><code>gemma-4-27b-it-Q8_0.gguf</code> (~29 GB) — highest quality, still fits</li>
+  <li><code>gemma-4-27b-it-Q4_K_M.gguf</code> (~16 GB): best speed/quality balance</li>
+  <li><code>gemma-4-27b-it-Q8_0.gguf</code> (~29 GB): highest quality, but tight on 36 GB</li>
 </ul>
 <pre><code>llm:
   provider: llamacpp
   model: gemma-4-27b-it   # informational label; server uses the loaded model
   # base_url: http://localhost:8080   # default</code></pre>
 
-<h3 id="llm-mlx">MLX — Apple Silicon native inference (port 8000) <span class="badge macos">macOS</span></h3>
+<h3 id="llm-mlx">MLX: Apple Silicon native inference (port 8000) <span class="badge macos">macOS</span></h3>
 <p>Apple's MLX framework compiles models for the unified memory architecture of Apple Silicon, typically delivering the fastest token throughput of any local option on M-series hardware.</p>
 <pre><code>pip install mlx-lm
 
-# Gemma 4 27B 4-bit (~16 GB) — recommended for M5 Max
+# Gemma 4 27B 4-bit (~16 GB): recommended for M5 Max
 python -m mlx_lm.server \
   --model mlx-community/gemma-4-27b-it-4bit \
   --port 8000
 
-# GPT-OSS 20B 4-bit (~12 GB) — faster, lighter
+# GPT-OSS 20B 4-bit (~12 GB): faster, lighter
 python -m mlx_lm.server \
   --model mlx-community/gpt-oss-20B-instruct-4bit \
   --port 8000</code></pre>
@@ -748,7 +764,7 @@ python -m mlx_lm.server \
   api_key: sk-...           # or set OPENAI_API_KEY env var</code></pre>
 
 <h3 id="llm-apple">Apple Foundation Models (on-device, no API key) <span class="badge macos">macOS</span></h3>
-<p>Uses Apple's <code>FoundationModels</code> framework, available on macOS 26+ with Apple Intelligence enabled. Inference runs entirely on-device via the Neural Engine — no network request, no API key.</p>
+<p>Uses Apple's <code>FoundationModels</code> framework, available on macOS 26+ with Apple Intelligence enabled. Inference runs entirely on-device via the Neural Engine: no network request, no API key.</p>
 <p>A small bridge binary (<code>mt-apple-bridge</code>) is required because Go cannot import Swift frameworks directly. Build it once from the repository root:</p>
 <pre><code>make apple-bridge            # compiles cmd/apple-llm/main.swift → ./mt-apple-bridge
 make install-apple-bridge    # installs to /usr/local/bin/mt-apple-bridge</code></pre>
@@ -789,7 +805,7 @@ Response: RUN:Open Outlook</code></pre>
 
 <div class="callout warn">
   <strong>Server not reachable</strong>
-  <em>"litellm: not reachable at http://localhost:4000"</em> — start the LiteLLM proxy first. <em>"llamacpp: not reachable at http://localhost:8080"</em> — start <code>llama-server</code> first. <em>"mlx: not reachable at http://localhost:8000"</em> — start <code>mlx_lm.server</code> first. <em>"openai: no API key"</em> — set <code>api_key</code> in config or <code>OPENAI_API_KEY</code> env var. Enable <code>debug: true</code> to see exact request/response details.
+  <em>"litellm: not reachable at http://localhost:4000"</em>: start the LiteLLM proxy first. <em>"llamacpp: not reachable at http://localhost:8080"</em>: start <code>llama-server</code> first. <em>"mlx: not reachable at http://localhost:8000"</em>: start <code>mlx_lm.server</code> first. <em>"openai: no API key"</em>: set <code>api_key</code> in config or <code>OPENAI_API_KEY</code> env var. Enable <code>debug: true</code> to see exact request/response details.
 </div>
 
 <h3>Microsoft Copilot</h3>
@@ -806,7 +822,7 @@ make build                    # produces ./mt
 make install                  # copies to /usr/local/bin/mt</code></pre>
 <p>Or install just the binary without source:</p>
 <pre><code>go install github.com/mrwalker511/mt@latest
-# binary lands in $(go env GOPATH)/bin — ensure that's on $PATH</code></pre>
+# binary lands in $(go env GOPATH)/bin: ensure that's on $PATH</code></pre>
 
 <h3>Config file location</h3>
 <pre><code>mkdir -p ~/Library/Application\ Support/mt
@@ -831,7 +847,7 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
              --n-gpu-layers 99 --ctx-size 32768 --threads 10 --port 8080</code></pre>
 
 <h3>Symlink note</h3>
-<p>On macOS, <code>/tmp</code> and system temp directories resolve through <code>/private</code> (e.g. <code>/var/folders/…</code> → <code>/private/var/folders/…</code>). mt handles this transparently — include paths are validated after symlink resolution so you will not see false "outside home directory" errors.</p>
+<p>On macOS, <code>/tmp</code> and system temp directories resolve through <code>/private</code> (e.g. <code>/var/folders/…</code> → <code>/private/var/folders/…</code>). mt handles this transparently: include paths are validated after symlink resolution so you will not see false "outside home directory" errors.</p>
 
 <!-- ── Default Workspaces ────────────────────────────────────────────── -->
 <h2 id="defaults">Default Workspaces <a class="anchor" href="#defaults">#</a></h2>
@@ -873,15 +889,18 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
     </tr>
   </tbody>
 </table>
-<p>The meeting targets (New 30-Min Meeting, New 1-Hr Meeting, New Teams Meeting) use AppleScript to create events in Outlook starting one hour from the current time. The <em>Schedule with AI</em> target is a reminder placeholder — press <code>/</code> and describe what you need instead of running it directly.</p>
+<p>The meeting targets (New 30-Min Meeting, New 1-Hr Meeting, New Teams Meeting) use AppleScript to create events in Outlook starting one hour from the current time. The <em>Schedule with AI</em> target is a reminder placeholder: press <code>/</code> and describe what you need instead of running it directly.</p>
 <p>These defaults are macOS-oriented. Create a config file to tailor them to your system and workflows.</p>
 
 <!-- ── Security Model ────────────────────────────────────────────────── -->
 <h2 id="security">Security Model <a class="anchor" href="#security">#</a></h2>
 <p><code>mt</code> is a local single-user tool. Its trust boundary is the config file: whoever can write the config can run arbitrary commands as the user who runs <code>mt</code>. The security controls below harden that boundary.</p>
 
+<h3>Folder trust</h3>
+<p>A <code>./mt.yaml</code> in the current folder is loaded only if you have run <code>mt --trust</code> in that folder; otherwise it is ignored with a notice and your user config is used. Starting mt inside a freshly cloned repository therefore never loads that repository's targets. Nothing runs until you press <code>Enter</code> in any case, but trust stops a hostile config from relabelling targets you rely on. See <a href="#config-trust">Trusting a folder</a>.</p>
+
 <h3>SSH host validation</h3>
-<p>The <code>host:</code> field is validated at config load time against the pattern <code>^[a-zA-Z0-9][a-zA-Z0-9._@%-]*$</code>. This rejects values starting with <code>-</code>, which SSH would interpret as option flags — the vector for ProxyCommand injection. A config containing an invalid host is rejected entirely and mt falls back to built-in defaults with an error message.</p>
+<p>The <code>host:</code> field is validated at config load time against the pattern <code>^[a-zA-Z0-9][a-zA-Z0-9._@%-]*$</code>. This rejects values starting with <code>-</code>, which SSH would interpret as option flags (the vector for ProxyCommand injection). A config containing an invalid host is rejected entirely and mt falls back to built-in defaults with an error message. SSH also runs with <code>BatchMode=yes</code>, so it can never sit waiting at a hidden password prompt.</p>
 
 <h3>World-writable config rejection</h3>
 <p>Before reading any config file (including files loaded via <code>include:</code>), mt checks the file permissions. If the world-writable bit (<code>0002</code>) is set, mt refuses to load the file. On a shared or multi-user system this prevents another user from injecting commands by modifying a config file they can write to.</p>
@@ -902,7 +921,7 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
 <p>Command output is capped at 1 MB as it is read, so a runaway command cannot grow memory without limit. Per-target cached output is limited to 256 KB. This prevents runaway commands from exhausting available memory.</p>
 
 <h3>Log file safe creation</h3>
-<p>Log files are created with <code>O_EXCL</code> (exclusive creation), which fails if anything — including a symlink — already exists at the target path. This closes a TOCTOU race that could otherwise be used to overwrite an arbitrary file.</p>
+<p>Log files are created with <code>O_EXCL</code> (exclusive creation), which fails if anything, including a symlink, already exists at the target path. This closes a TOCTOU race that could otherwise be used to overwrite an arbitrary file.</p>
 <p>Log files are stored in <code>~/.mt/logs/</code> with mode <code>0640</code> (readable only by owner and group). The directory itself is created with mode <code>0750</code>.</p>
 
 <h3>Goroutine and process cancellation</h3>
@@ -929,6 +948,21 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
       <td>"path must be within home directory"</td>
       <td><code>include:</code> path resolves outside <code>$HOME</code> or via a symlink that escapes <code>$HOME</code></td>
       <td>Move the included file inside your home directory</td>
+    </tr>
+    <tr>
+      <td>"line N: unknown key "…" (did you mean "…"?)"</td>
+      <td>A misspelled or unsupported key in the config</td>
+      <td>Fix the key on that line; the suggestion is the closest valid key</td>
+    </tr>
+    <tr>
+      <td>"Ignored ./mt.yaml: this folder is not trusted"</td>
+      <td>The folder has an <code>mt.yaml</code> but you have not trusted it</td>
+      <td>Run <code>mt --trust</code> in that folder if you trust its config</td>
+    </tr>
+    <tr>
+      <td>"sequence "…": step "…" not found / has no command / can't be nested"</td>
+      <td>A <code>sequence:</code> names a missing target, a target without a command, or another sequence</td>
+      <td>Fix the step name or give the step a <code>run:</code>; nothing was run</td>
     </tr>
     <tr>
       <td>"no domains or workspaces defined"</td>
@@ -1007,10 +1041,10 @@ sudo apt install xsel
 sudo apt install wl-clipboard</code></pre>
 
 <h3>SSH commands fail immediately</h3>
-<p>mt does not handle SSH authentication. Ensure:</p>
+<p>mt runs ssh with <code>BatchMode=yes</code>, so anything that would need typing (a password, a key passphrase, accepting a new host key) fails at once instead of hanging. Typical messages are <em>Permission denied (publickey)</em> and <em>Host key verification failed</em>. Ensure:</p>
 <ul>
-  <li>Your SSH key is loaded: <code>ssh-add ~/.ssh/id_ed25519</code></li>
-  <li>The host is reachable: <code>ssh user@hostname echo ok</code></li>
+  <li>Your SSH key is loaded: <code>ssh-add ~/.ssh/id_ed25519</code> (on macOS, <code>ssh-add --apple-use-keychain</code> remembers it)</li>
+  <li>The host is already known: connect once in a normal terminal with <code>ssh user@hostname echo ok</code> and accept its key</li>
   <li>SSH config in <code>~/.ssh/config</code> has the right settings for the host</li>
 </ul>
 
@@ -1021,7 +1055,7 @@ sudo apt install wl-clipboard</code></pre>
 <p>mt requires a minimum terminal width to render correctly. Widen your terminal window if you see a "terminal too narrow" message.</p>
 
 <h3>Hot-reload wipes run history</h3>
-<p>Pressing <code>r</code> resets all cursor positions and cached target output. This is intentional — the workspace structure may have changed. Run your commands again after reloading.</p>
+<p>Pressing <code>r</code> resets all cursor positions and cached target output. This is intentional: the workspace structure may have changed. Run your commands again after reloading.</p>
 
 <hr>
 <p style="color:var(--muted);font-size:13px;">mt &nbsp;·&nbsp; <a href="https://github.com/mrwalker511/mt">github.com/mrwalker511/mt</a></p>

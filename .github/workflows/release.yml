@@ -1,0 +1,48 @@
+name: Release
+
+# Push a version tag to publish a release:
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: test
+        run: go test ./...
+
+      - name: build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          make apple-bridge
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            os=${target%/*}; arch=${target#*/}
+            name="mt-${VERSION}-${os}-${arch}"
+            mkdir -p "dist/$name"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+              go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "dist/$name/mt" .
+            cp README.md mt.yaml.example "dist/$name/"
+            # The Apple bridge is built on this Apple Silicon runner.
+            if [ "$os/$arch" = "darwin/arm64" ]; then cp mt-apple-bridge "dist/$name/"; fi
+            tar -C dist -czf "dist/$name.tar.gz" "$name"
+          done
+          (cd dist && shasum -a 256 *.tar.gz > checksums.txt)
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/*.tar.gz dist/checksums.txt --generate-notes

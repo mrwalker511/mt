@@ -10,6 +10,7 @@ type Workspace struct {
 type Domain struct {
 	Name    string   `yaml:"name"`
 	Targets []Target `yaml:"targets"`
+	Live    []string `yaml:"-"` // live status command, from the config's live: string
 }
 
 // Target is a single actionable item within a domain.
@@ -21,9 +22,10 @@ type Target struct {
 	LaunchMsg string   `yaml:"launch_msg"` // shown when Cmd succeeds but produces no output (e.g. open -a)
 	Sequence  []string `yaml:"sequence"`   // ordered list of target names to run in series
 	Host      string   `yaml:"host"`       // SSH host; if set, cmd is run via ssh host <cmd>
+	Dir       string   `yaml:"dir"`        // working directory (remote directory for SSH targets)
 }
 
-// Outlook AppleScript templates — osascript is passed via -e so the entire script
+// Outlook AppleScript templates: osascript is passed via -e so the entire script
 // is a single string argument, avoiding temp-file creation.
 const outlookMeeting30 = `tell application "Microsoft Outlook"
 set s to (current date) + (1 * hours)
@@ -65,6 +67,13 @@ const excelNewWorkbook = `tell application "Microsoft Excel"
 activate
 make new workbook
 end tell`
+
+// gitLiveScript prints "Branch: main  (3 modified)" for the Context/Git live
+// header, and fails (hiding the header) outside a git repository.
+const gitLiveScript = `b=$(git branch --show-current 2>/dev/null) || exit 1
+[ -n "$b" ] || b=$(git rev-parse --short HEAD)
+n=$(git status --porcelain | wc -l | tr -d ' ')
+if [ "$n" -gt 0 ]; then echo "Branch: $b  ($n modified)"; else echo "Branch: $b"; fi`
 
 var initialDomains = []Domain{
 	{
@@ -279,6 +288,7 @@ var initialDomains = []Domain{
 	},
 	{
 		Name: "Infrastructure",
+		Live: []string{"docker", "ps", "--format", "{{.Names}}: {{.Status}}"},
 		Targets: []Target{
 			{Name: "Docker Up", Status: "Docker: Stopped\n\nPress [Enter] to start containers", Cmd: []string{"docker", "compose", "up", "-d"}},
 			{Name: "Docker Down", Status: "Press [Enter] to stop all containers", Cmd: []string{"docker", "compose", "down"}},
@@ -288,6 +298,7 @@ var initialDomains = []Domain{
 	},
 	{
 		Name: "Context/Git",
+		Live: []string{"sh", "-c", gitLiveScript},
 		Targets: []Target{
 			{Name: "Git Status", Status: "Press [Enter] to run git status", Cmd: []string{"git", "status"}},
 			{Name: "Git Diff", Status: "Press [Enter] to view diff", Cmd: []string{"git", "diff"}},

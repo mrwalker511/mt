@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const DefaultAppleBridgeName = "mt-apple-bridge"
@@ -26,7 +27,7 @@ func generateApple(ctx context.Context, cfg Config, systemPrompt, userMessage st
 	if bridgePath == "" {
 		var err error
 		if bridgePath, err = exec.LookPath(DefaultAppleBridgeName); err != nil {
-			return "", fmt.Errorf("apple: %s not found — run `make apple-bridge` then place the binary alongside mt or in your PATH", DefaultAppleBridgeName)
+			return "", fmt.Errorf("apple: %s not found; run `make apple-bridge` then place the binary alongside mt or in your PATH", DefaultAppleBridgeName)
 		}
 	}
 
@@ -35,6 +36,8 @@ func generateApple(ctx context.Context, cfg Config, systemPrompt, userMessage st
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
+	// After a cancel, don't wait for children of the bridge that still hold its pipes.
+	cmd.WaitDelay = 2 * time.Second
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {

@@ -59,7 +59,7 @@ func Generate(ctx context.Context, cfg Config, systemPrompt, userMessage string)
 			apiKey = os.Getenv("OPENAI_API_KEY")
 		}
 		if apiKey == "" {
-			return "", fmt.Errorf("openai: no API key — set api_key in config or OPENAI_API_KEY env var")
+			return "", fmt.Errorf("openai: no API key; set api_key in config or OPENAI_API_KEY env var")
 		}
 		if model == "" {
 			model = DefaultOpenAIModel

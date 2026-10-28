@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mt — CI/CD Manual</title>
+  <title>mt: CI/CD Manual</title>
   <style>
     :root {
       --bg:       #0f1117;
@@ -265,7 +265,9 @@
       <ul>
         <li><a href="#step-checkout">checkout</a></li>
         <li><a href="#step-setup-go">setup-go</a></li>
+        <li><a href="#step-gofmt">gofmt</a></li>
         <li><a href="#step-vet">go vet</a></li>
+        <li><a href="#step-staticcheck">staticcheck</a></li>
         <li><a href="#step-test">go test</a></li>
         <li><a href="#step-build">go build</a></li>
       </ul>
@@ -273,6 +275,7 @@
     <li><a href="#go-version">Go version management</a></li>
     <li><a href="#caching">Dependency caching</a></li>
     <li><a href="#reading-results">Reading results</a></li>
+    <li><a href="#release">Release workflow</a></li>
     <li><a href="#extending">Extending the workflow</a></li>
     <li><a href="#local-parity">Local parity</a></li>
   </ul>
@@ -281,17 +284,18 @@
 <!-- ── Main content ───────────────────────────────────────────────────── -->
 <main>
 
-<h1>mt — CI/CD Manual<span class="tagline">GitHub Actions workflow reference</span></h1>
+<h1>mt: CI/CD Manual<span class="tagline">GitHub Actions workflow reference</span></h1>
 
 <!-- ── Overview ─────────────────────────────────────────────────────── -->
 <h2 id="overview">Overview <a class="anchor" href="#overview">#</a></h2>
-<p><code>mt</code> uses a single GitHub Actions workflow file, <code>.github/workflows/ci.yml</code>, that runs automatically on every push and every pull request. It executes three parallel jobs — <span class="job-badge job-test">test</span>, <span class="job-badge job-build">build</span> and <span class="job-badge job-macos">macos</span> — giving fast feedback on code correctness, compilation, and the macOS-only Apple bridge.</p>
+<p><code>mt</code> uses a single GitHub Actions workflow file, <code>.github/workflows/ci.yml</code>, that runs automatically on every push and every pull request. It executes three parallel jobs, <span class="job-badge job-test">test</span>, <span class="job-badge job-build">build</span> and <span class="job-badge job-macos">macos</span>, giving fast feedback on code correctness, compilation, and the macOS-only Apple bridge.</p>
 
-<p>The workflow is intentionally minimal: no deployment, no release automation, no matrix builds. Its only job is to catch regressions before they land on <code>main</code>.</p>
+<p>Its job is to catch regressions before they land on <code>main</code>. A second workflow, <code>.github/workflows/release.yml</code>, publishes release builds when a version tag is pushed; see <a href="#release">Release workflow</a>.</p>
 
 <pre><code>.github/
 └── workflows/
-    └── ci.yml   ← the only workflow file</code></pre>
+    ├── ci.yml        ← every push and pull request
+    └── release.yml   ← version tags (v*)</code></pre>
 
 <!-- ── Triggers ──────────────────────────────────────────────────────── -->
 <h2 id="triggers">Triggers <a class="anchor" href="#triggers">#</a></h2>
@@ -302,8 +306,8 @@
     branches: ["**"]
   pull_request:</code></pre>
 
-<h3 id="trigger-push">On push — every branch</h3>
-<p><code>branches: ["**"]</code> matches every branch name without exception. This means CI runs the moment you push any commit anywhere — not just to <code>main</code> or protected branches.</p>
+<h3 id="trigger-push">On push: every branch</h3>
+<p><code>branches: ["**"]</code> matches every branch name without exception. This means CI runs the moment you push any commit anywhere: not just to <code>main</code> or protected branches.</p>
 <p><strong>Why:</strong> Developers working on feature branches get immediate feedback without waiting for a PR. A broken build on a long-running branch is caught before it diverges further from a working state. The cost is a few extra CI minutes per push, which is worthwhile for a small repo.</p>
 
 <h3 id="trigger-pr">On pull request</h3>
@@ -312,7 +316,7 @@
 
 <div class="callout">
   <strong>Push + PR: is CI run twice?</strong>
-  When you push to a branch that has an open PR, both triggers fire — GitHub runs CI for the push event and again for the PR synchronize event. This is normal and harmless; it means the PR status check reflects the latest commit regardless of whether the PR was open at push time.
+  When you push to a branch that has an open PR, both triggers fire: GitHub runs CI for the push event and again for the PR synchronize event. This is normal and harmless; it means the PR status check reflects the latest commit regardless of whether the PR was open at push time.
 </div>
 
 <!-- ── Jobs ───────────────────────────────────────────────────────────── -->
@@ -325,8 +329,8 @@
     <tr>
       <td><span class="job-badge job-test">test</span></td>
       <td><code>ubuntu-latest</code></td>
-      <td>checkout → setup-go → <code>go vet</code> → <code>go test</code></td>
-      <td>Verify code correctness: static analysis and test suite</td>
+      <td>checkout → setup-go → gofmt → <code>go vet</code> → staticcheck → <code>go test -race</code></td>
+      <td>Verify code correctness: formatting, static analysis, and the test suite with the race detector</td>
     </tr>
     <tr>
       <td><span class="job-badge job-build">build</span></td>
@@ -344,7 +348,7 @@
 </table>
 
 <h3 id="job-test">test job</h3>
-<p>Runs static analysis with <code>go vet</code> followed by the full test suite with <code>go test</code>. Vet runs first because it is faster and catches issues that would otherwise produce confusing test failures (e.g. a misformatted <code>Printf</code> call or an unreachable code path).</p>
+<p>Checks formatting, runs two layers of static analysis, then the full test suite with the race detector. The cheap checks run first so a formatting slip fails in seconds, before any tests run.</p>
 
 <div class="pipeline">
   <div class="step">
@@ -366,16 +370,32 @@
   <div class="step">
     <div class="step-num">3</div>
     <div class="step-body">
-      <div class="step-name">go vet ./...</div>
-      <div class="step-desc">Static analysis across all packages — catches common mistakes before tests run</div>
+      <div class="step-name">gofmt -l .</div>
+      <div class="step-desc">Fails if any file is not gofmt-formatted, and lists the files</div>
     </div>
   </div>
   <div class="step-arrow">↓</div>
   <div class="step">
     <div class="step-num">4</div>
     <div class="step-body">
-      <div class="step-name">go test ./...</div>
-      <div class="step-desc">Runs all test files; exits non-zero if any test fails or the build fails during test compilation</div>
+      <div class="step-name">go vet ./...</div>
+      <div class="step-desc">The Go toolchain's built-in static analysis: catches common mistakes before tests run</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <div class="step-name">staticcheck ./...</div>
+      <div class="step-desc">Deeper static analysis (unused code, simplifications, suspicious constructs), pinned to v0.7.0</div>
+    </div>
+  </div>
+  <div class="step-arrow">↓</div>
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <div class="step-name">go test -race ./...</div>
+      <div class="step-desc">Runs every test with the race detector, which fails the run on any data race between goroutines</div>
     </div>
   </div>
 </div>
@@ -388,7 +408,7 @@
     <div class="step-num">1</div>
     <div class="step-body">
       <div class="step-name">actions/checkout@v4</div>
-      <div class="step-desc">Fresh clone on a separate runner — no shared state with the test job</div>
+      <div class="step-desc">Fresh clone on a separate runner: no shared state with the test job</div>
     </div>
   </div>
   <div class="step-arrow">↓</div>
@@ -444,7 +464,7 @@
     <tr>
       <td><code>go-version-file</code></td>
       <td><code>go.mod</code></td>
-      <td>Reads the <code>go</code> directive from <code>go.mod</code> to pick the exact toolchain version — currently Go 1.25.0. No hardcoded version string in the workflow file; the workflow automatically tracks <code>go.mod</code> changes.</td>
+      <td>Reads the <code>go</code> directive from <code>go.mod</code> to pick the exact toolchain version: currently Go 1.25.0. No hardcoded version string in the workflow file; the workflow automatically tracks <code>go.mod</code> changes.</td>
     </tr>
     <tr>
       <td><code>cache</code></td>
@@ -454,14 +474,23 @@
   </tbody>
 </table>
 
+<h3 id="step-gofmt">gofmt</h3>
+<pre><code>- name: gofmt
+  run: |
+    unformatted=$(gofmt -l .)
+    if [ -n "$unformatted" ]; then
+      echo "These files need gofmt:"; echo "$unformatted"; exit 1
+    fi</code></pre>
+<p><code>gofmt -l</code> lists files whose formatting differs from the standard. Fix them locally with <code>gofmt -w .</code>.</p>
+
 <h3 id="step-vet">go vet ./...</h3>
 <pre><code>- name: vet
   run: go vet ./...</code></pre>
 <p><code>go vet</code> is the Go standard library's built-in static analyser. It runs a collection of checks that the compiler does not enforce but that almost always indicate bugs:</p>
 <ul>
-  <li><strong>Printf format/argument mismatch</strong> — e.g. <code>fmt.Sprintf("%d", "not an int")</code></li>
+  <li><strong>Printf format/argument mismatch</strong>: e.g. <code>fmt.Sprintf("%d", "not an int")</code></li>
   <li><strong>Unreachable code</strong> after <code>return</code>/<code>panic</code></li>
-  <li><strong>Struct tag syntax errors</strong> — malformed <code>yaml:</code> tags would silently break config parsing</li>
+  <li><strong>Struct tag syntax errors</strong>: malformed <code>yaml:</code> tags would silently break config parsing</li>
   <li><strong>Copying of mutexes</strong> by value</li>
   <li><strong>Incorrect use of <code>sync/atomic</code></strong></li>
   <li><strong>Loop variable capture</strong> in goroutines (pre-Go 1.22)</li>
@@ -469,16 +498,21 @@
 <p>Vet runs before tests because its checks are cheap (no execution) and a vet failure on a <code>Sprintf</code> call often manifests as a confusing test failure rather than a clear error.</p>
 <p>The <code>./...</code> pattern matches every package in the module, including test packages.</p>
 
-<h3 id="step-test">go test ./...</h3>
+<h3 id="step-staticcheck">staticcheck</h3>
+<pre><code>- name: staticcheck
+  run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...</code></pre>
+<p><a href="https://staticcheck.dev">Staticcheck</a> goes beyond <code>go vet</code>: unused functions and fields, code that can be simplified, deprecated APIs, and error strings that break Go conventions. <code>go run …@v0.7.0</code> fetches and runs that exact version without adding it to <code>go.mod</code>. To upgrade, change the version here and in the <code>Makefile</code>'s <code>check</code> target.</p>
+
+<h3 id="step-test">go test -race ./...</h3>
 <pre><code>- name: test
-  run: go test ./...</code></pre>
+  run: go test -race ./...</code></pre>
 <p>Compiles and runs every <code>_test.go</code> file in the module. <code>./...</code> recursively descends into subdirectories, so this covers both <code>internal/tui/</code> (the main package) and any future packages added under the module root.</p>
 <p>Key behaviours of <code>go test</code> in this configuration:</p>
 <ul>
-  <li>Each package's tests run in a fresh binary — test failures in one package do not prevent other packages from running.</li>
+  <li>Each package's tests run in a fresh binary: test failures in one package do not prevent other packages from running.</li>
   <li>A non-zero exit from any test binary causes the overall step to fail.</li>
   <li>Test binaries that panic are reported as failures, not crashes.</li>
-  <li>The race detector is <em>not</em> enabled here (no <code>-race</code> flag). The test suite can be run with <code>go test -race ./...</code> locally for deeper concurrency checking.</li>
+  <li>The race detector is enabled (<code>-race</code>). mt streams command output from background goroutines into buffers the UI reads, so a data race there would fail CI rather than show up as rare garbled output. The macOS job runs the tests without <code>-race</code> to stay fast.</li>
 </ul>
 
 <div class="callout">
@@ -491,13 +525,13 @@
   run: go build -o mt .</code></pre>
 <p>Compiles the module's root package (<code>main</code>) and all its transitive dependencies into a single binary named <code>mt</code>. The <code>-o mt</code> flag names the output file explicitly; without it Go would use the module name.</p>
 <p><strong>Why this step is separate from <code>go test</code>:</strong> <code>go test ./...</code> does compile all non-test packages to build the test binaries, so a compile error in a library package would surface there. However, <code>go build .</code> exercises the <code>main</code> package's linkage and any <code>//go:embed</code> directives independently, and it verifies the exact build command developers use locally matches CI.</p>
-<p>The produced <code>mt</code> binary is not archived or uploaded — this step exists purely as a compilation gate. No artifact is retained after the job finishes.</p>
+<p>The produced <code>mt</code> binary is not archived or uploaded: this step exists purely as a compilation gate. No artifact is retained after the job finishes.</p>
 
 <!-- ── Go version management ──────────────────────────────────────────── -->
 <h2 id="go-version">Go version management <a class="anchor" href="#go-version">#</a></h2>
 <p>The Go version used by CI is determined entirely by the <code>go</code> directive in <code>go.mod</code>:</p>
 <pre><code>go 1.25.0</code></pre>
-<p>Because every job sets <code>go-version-file: go.mod</code>, updating the minimum Go version in <code>go.mod</code> automatically changes the version used in CI on the next push — no workflow file edit needed.</p>
+<p>Because every job sets <code>go-version-file: go.mod</code>, updating the minimum Go version in <code>go.mod</code> automatically changes the version used in CI on the next push: no workflow file edit needed.</p>
 
 <div class="callout warn">
   <strong>Minimum vs. exact version</strong>
@@ -518,15 +552,15 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.26.0"</code></pre>
   <tbody>
     <tr>
       <td>No dependency changes since last run</td>
-      <td>Full cache hit — modules restored in seconds, no network I/O</td>
+      <td>Full cache hit: modules restored in seconds, no network I/O</td>
     </tr>
     <tr>
       <td><code>go.sum</code> changed (new or updated dependency)</td>
-      <td>Cache miss — modules re-downloaded; new cache entry saved for future runs</td>
+      <td>Cache miss: modules re-downloaded; new cache entry saved for future runs</td>
     </tr>
     <tr>
       <td>First run ever, or cache evicted by GitHub</td>
-      <td>Cold download — takes 10–20 s for <code>mt</code>'s small dependency tree</td>
+      <td>Cold download: takes 10–20 s for <code>mt</code>'s small dependency tree</td>
     </tr>
   </tbody>
 </table>
@@ -556,6 +590,16 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.26.0"</code></pre>
       <td><span class="job-badge job-test">test</span></td>
       <td><code>vet</code></td>
       <td>Static analysis issue: mismatched Printf arguments, struct tag typo, mutex copy. Fix with <code>go vet ./...</code> locally.</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-test">test</span></td>
+      <td><code>gofmt</code></td>
+      <td>A file is not formatted. The log lists it; run <code>gofmt -w .</code> and commit.</td>
+    </tr>
+    <tr>
+      <td><span class="job-badge job-test">test</span></td>
+      <td><code>staticcheck</code></td>
+      <td>Each finding is printed as <code>file:line: message (code)</code>, e.g. <code>func x is unused (U1000)</code>. Look the code up at staticcheck.dev/docs/checks.</td>
     </tr>
     <tr>
       <td><span class="job-badge job-test">test</span></td>
@@ -589,12 +633,6 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.26.0"</code></pre>
 <h2 id="extending">Extending the workflow <a class="anchor" href="#extending">#</a></h2>
 <p>Common additions to consider as the project grows:</p>
 
-<h3>Enable the race detector</h3>
-<p>Replace the test step with:</p>
-<pre><code>- name: test
-  run: go test -race ./...</code></pre>
-<p>The race detector adds ~2× overhead and requires CGO. It is off by default to keep CI fast; enable it if concurrency bugs become a concern.</p>
-
 <h3>Add a coverage upload</h3>
 <pre><code>- name: test
   run: go test -coverprofile=coverage.out ./...
@@ -603,31 +641,6 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.26.0"</code></pre>
   uses: codecov/codecov-action@v4
   with:
     files: coverage.out</code></pre>
-
-<h3>Add a release job</h3>
-<p>To build release binaries for multiple platforms when a tag is pushed:</p>
-<pre><code>on:
-  push:
-    tags: ["v*"]
-
-jobs:
-  release:
-    strategy:
-      matrix:
-        goos: [linux, darwin]
-        goarch: [amd64, arm64]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: go build -o mt-${{ matrix.goos }}-${{ matrix.goarch }} .</code></pre>
 
 <h3>Restrict CI to fewer branches</h3>
 <p>If the current all-branch trigger produces too many CI runs, narrow it:</p>
@@ -642,25 +655,39 @@ jobs:
   The current workflow uses no secrets. If you add steps that require credentials (registry login, deployment keys), always store them in repository secrets (<strong>Settings → Secrets and variables → Actions</strong>) and reference them as <code>${{ secrets.MY_SECRET }}</code>. Never hardcode credentials in workflow YAML.
 </div>
 
+<!-- ── Release workflow ───────────────────────────────────────────────── -->
+<h2 id="release">Release workflow <a class="anchor" href="#release">#</a></h2>
+<p><code>.github/workflows/release.yml</code> runs when a tag starting with <code>v</code> is pushed:</p>
+<pre><code>git tag v1.0.0
+git push origin v1.0.0</code></pre>
+<p>It runs on <code>macos-latest</code> (Apple Silicon) so it can build the Swift bridge, and:</p>
+<ol>
+  <li>runs the tests;</li>
+  <li>builds <code>mt</code> for <code>darwin/arm64</code>, <code>darwin/amd64</code>, <code>linux/amd64</code> and <code>linux/arm64</code> with <code>CGO_ENABLED=0</code>, <code>-trimpath</code> and <code>-ldflags "-s -w -X main.version=&lt;tag&gt;"</code>, so <code>mt --version</code> prints the tag;</li>
+  <li>packs each into <code>mt-&lt;tag&gt;-&lt;os&gt;-&lt;arch&gt;.tar.gz</code> with the README and example config, adding <code>mt-apple-bridge</code> to the <code>darwin-arm64</code> archive;</li>
+  <li>writes <code>checksums.txt</code> (SHA-256) and publishes everything as a GitHub release with generated notes, using the workflow's own <code>GITHUB_TOKEN</code> (<code>permissions: contents: write</code>). No secrets need configuring.</li>
+</ol>
+<p>Users verify a download with <code>shasum -a 256 -c checksums.txt --ignore-missing</code>.</p>
+
 <!-- ── Local parity ────────────────────────────────────────────────────── -->
 <h2 id="local-parity">Local parity <a class="anchor" href="#local-parity">#</a></h2>
-<p>The CI steps map to <code>Makefile</code> targets. Running <code>make all</code> locally executes vet, test and build in the same order (add <code>make apple-bridge</code> on a Mac to match the macos job):</p>
+<p>The CI steps map to <code>Makefile</code> targets. <code>make check</code> runs exactly the test job's checks; add <code>make build</code>, and <code>make apple-bridge</code> on a Mac, to match the other jobs:</p>
 
 <table>
   <thead><tr><th>CI step</th><th>Local equivalent</th><th>Make target</th></tr></thead>
   <tbody>
-    <tr><td><code>go vet ./...</code></td><td><code>go vet ./...</code></td><td><code>make vet</code></td></tr>
-    <tr><td><code>go test ./...</code></td><td><code>go test ./...</code></td><td><code>make test</code></td></tr>
+    <tr><td>gofmt, <code>go vet</code>, staticcheck, <code>go test -race</code></td><td>the same commands</td><td><code>make check</code></td></tr>
+    <tr><td><code>go test ./...</code> (macos job)</td><td><code>go test ./...</code></td><td><code>make test</code></td></tr>
     <tr><td><code>go build -o mt .</code></td><td><code>go build -o mt .</code></td><td><code>make build</code></td></tr>
     <tr><td><code>make apple-bridge</code></td><td><code>swiftc … &amp;&amp; codesign …</code></td><td><code>make apple-bridge</code> (macOS only)</td></tr>
   </tbody>
 </table>
 
-<p>Running <code>make all</code> (or <code>make vet test build</code>) before pushing gives you high confidence that CI will pass. CI runs on both <code>ubuntu-latest</code> and <code>macos-latest</code>, so platform differences (the clipboard tool, the Apple bridge, macOS temp-dir symlinks) are covered whichever OS you develop on.</p>
+<p>Running <code>make check build</code> before pushing gives you high confidence that CI will pass. CI runs on both <code>ubuntu-latest</code> and <code>macos-latest</code>, so platform differences (the clipboard tool, the Apple bridge, macOS temp-dir symlinks) are covered whichever OS you develop on.</p>
 
 <div class="callout success">
   <strong>Tip: run CI checks before pushing</strong>
-  <code>make all</code> runs vet, test, and build in sequence and exits non-zero on the first failure — the same behaviour as CI. Add it to a pre-push git hook to catch failures before they reach GitHub.
+  <code>make check</code> stops at the first failing check, just like CI. Add it to a pre-push git hook to catch failures before they reach GitHub.
 </div>
 
 <hr>

@@ -136,7 +136,7 @@ domains:
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := effectiveCmd(ws[0].Domains[0].Targets[0])
-	want := []string{"ssh", "deploy@prod.example.com", "journalctl -u myapp | grep -i error"}
+	want := []string{"ssh", "-o", "BatchMode=yes", "deploy@prod.example.com", "journalctl -u myapp | grep -i error"}
 	if !slices.Equal(got, want) {
 		t.Errorf("effectiveCmd = %q, want %q", got, want)
 	}

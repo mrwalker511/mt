@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,8 +40,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (Model, tea.Cmd) {
 			case tea.MouseButtonWheelUp:
 				m.scrollOffset = max(m.scrollOffset-1, 0)
 			case tea.MouseButtonWheelDown:
-				maxOffset := max(strings.Count(m.output, "\n")+1-m.rightPanePageSize(), 0)
-				m.scrollOffset = min(m.scrollOffset+1, maxOffset)
+				m.scrollOffset = min(m.scrollOffset+1, m.maxScroll())
 			}
 		}
 		return m, nil
@@ -56,11 +54,20 @@ func (m Model) handleMouse(msg tea.MouseMsg) (Model, tea.Cmd) {
 
 	switch p {
 	case paneLeft:
-		if row >= 0 && row < len(m.domains) && row != m.domainCursor {
+		if row < 0 || row >= m.listRows() {
+			return m, nil
+		}
+		row += m.domainTop
+		if row < len(m.domains) && row != m.domainCursor {
 			m = m.moveCursor(row, 0)
 		}
 	case paneMiddle:
-		if m.domainCursor >= len(m.domains) || row < 0 || row >= len(m.domains[m.domainCursor].Targets) {
+		if m.domainCursor >= len(m.domains) || row < 0 || row >= m.listRows() {
+			return m, nil
+		}
+		targets := m.domains[m.domainCursor].Targets
+		row += m.targetTop
+		if row >= len(targets) {
 			return m, nil
 		}
 		if row != m.targetCursor {
