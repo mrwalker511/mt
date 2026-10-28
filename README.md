@@ -1,10 +1,12 @@
 # mt
 
-A keyboard-driven terminal workspace launcher. Navigate domains and targets in a 3-pane TUI, press Enter to run commands, and see output inline — no mouse required.
+A keyboard-driven terminal workspace launcher. Navigate domains and targets in a 3-pane TUI, press Enter to run commands, and see output inline: no mouse required.
 
 ## Install
 
-Requires Go 1.25 or later.
+Download a ready-built archive for macOS (Apple Silicon or Intel) or Linux from the [releases page](https://github.com/mrwalker511/mt/releases), unpack it, and put `mt` on your `PATH`. The Apple Silicon archive includes `mt-apple-bridge`.
+
+Or install with Go 1.25 or later:
 
 ```sh
 go install github.com/mrwalker511/mt@latest
@@ -21,8 +23,14 @@ make build   # produces ./mt
 ## Usage
 
 ```sh
-mt
+mt              # start
+mt --keys       # print every keyboard and trackpad shortcut
+mt --trust      # let mt load ./mt.yaml in this folder (see Configuration)
+mt --version
+mt --help
 ```
+
+Output streams into the right pane while a command runs, with the elapsed time underneath; `Esc` stops it. Long lists scroll, and the pane title shows your position, e.g. `TARGETS & ACTIONS (12/40)`.
 
 Keys follow Mac conventions. A terminal app never receives ⌘, so each ⌘ shortcut becomes the same letter on its own: ⌘C is `c`, ⌘S is `s`, ⌘R is `r`, ⌘Q is `q`. Press `?` in mt for a compact reference, or run `mt --keys` to print the full list.
 
@@ -128,14 +136,18 @@ llm:
 
 ## Configuration
 
-`mt` looks for a config file in order:
+`mt` uses the first of these that exists:
 
-1. System config dir — platform-dependent:
+1. `./mt.yaml` in the current folder, **if you have trusted that folder** with `mt --trust`
+2. Your user config:
    - **macOS:** `~/Library/Application Support/mt/config.yaml`
    - **Linux:** `~/.config/mt/config.yaml`
-2. `./mt.yaml` (local override in current directory)
 
 If neither exists, built-in defaults are used (macOS app launchers, Docker, and Git targets).
+
+**Folder trust:** a `./mt.yaml` can run any command, so mt ignores one in a folder you haven't trusted (it says so, and uses your user config). Run `mt --trust` in a folder to allow it and `mt --untrust` to revoke it. Trusted folders are listed in `~/.mt/trusted`.
+
+**Typos are caught:** an unknown key is an error naming the file and line, with a suggestion: `line 6: unknown key "comand" (did you mean "cmd"?)`.
 
 To get started with your own config:
 
@@ -165,10 +177,29 @@ domains:
       - name: "Full Pipeline"
         sequence: ["Build", "Test", "Deploy"]
 
-      # SSH target: runs the command on a remote host
+      # SSH target: runs the command on a remote host, in dir: there
       - name: "Deploy"
         host: "deploy@prod.example.com"
+        dir: ~/app
         run: ./deploy.sh --env production
+
+      # dir: sets the working directory (~/ expands to your home folder)
+      - name: "Web Tests"
+        dir: ~/projects/web
+        run: npm test
+```
+
+**Sequences** run their steps in order, stopping at the first failure, and are checked before anything runs: a step name that matches no target, a step with no command, or a nested sequence is an error naming the step. A step is looked up in the sequence's own domain first. You can also select sequences for a parallel multi-run.
+
+**Live status:** give a domain a `live:` command and the first 3 lines of its output show above the right pane while that domain is selected. Only the selected domain is polled (every 5 seconds), and a slow command is never started twice at once.
+
+```yaml
+domains:
+  - name: "Git"
+    live: git status --short --branch
+    targets:
+      - name: "Status"
+        run: git status
 ```
 
 **Writing commands:** `run:` takes the command as you would type it. Quotes group words, so `run: open -a "Microsoft Word"` passes `Microsoft Word` as one argument. There is no shell behind it, so pipes, `&&`, redirects, `$VARS` and `~` are rejected when the config loads, with a message naming the target. When you need them, wrap the command in a shell explicitly:
@@ -256,7 +287,7 @@ xattr -d com.apple.quarantine /usr/local/bin/mt-apple-bridge
 chmod 600 ~/Library/Application\ Support/mt/config.yaml
 ```
 
-`mt` rejects world-writable configs but doesn't enforce 0600 — set it manually so other local users can't read your targets or API keys.
+`mt` rejects world-writable configs but doesn't enforce 0600: set it manually so other local users can't read your targets or API keys.
 
 ### API keys
 
@@ -272,7 +303,7 @@ If you do store a key in the config file, the `chmod 600` above protects it from
 
 **Apple Foundation Models** (on-device, zero network, macOS 26+): see [On-device: Apple Foundation Models](#on-device-apple-foundation-models-macos-26) above.
 
-**llama.cpp with Metal** — optimal settings for M5 Max (36 GB unified memory):
+**llama.cpp with Metal**: optimal settings for M5 Max (36 GB unified memory):
 
 ```sh
 brew install llama.cpp
@@ -297,32 +328,38 @@ Your config is the trust boundary: anyone who can write it can run commands as y
 
 - Config files (and includes) with world-writable permissions are rejected
 - `include:` paths must resolve within `$HOME` (symlinks checked)
-- SSH `host:` values are validated against `[a-zA-Z0-9][a-zA-Z0-9._@%-]*` to block option injection
+- SSH `host:` values are validated against `[a-zA-Z0-9][a-zA-Z0-9._@%-]*` to block option injection, and ssh runs with `BatchMode=yes`, so it fails at once (e.g. `Permission denied (publickey)`) instead of hanging at a password prompt mt can't show. Load your key with `ssh-add` first
 - AI-generated commands never run without your explicit `Enter`
 - Command output is capped at 1 MB as it is read; per-target cache is bounded to 256 KB
 
-A `./mt.yaml` in the current directory overrides your user config, so only run `mt` in directories you trust.
+- A `./mt.yaml` is only loaded in folders you have trusted with `mt --trust`
 
 ## Development
 
 ```sh
+make check   # what CI runs: gofmt, go vet, staticcheck, tests with the race detector
 make test    # run tests
-make vet     # go vet
-make build   # compile
+make build   # compile ./mt, stamped with the git version (mt --version)
 make clean   # remove binary
 ```
 
-CI runs on every push and pull request via GitHub Actions (`.github/workflows/ci.yml`): vet + test on Linux, a Linux build, and a macOS job that also builds the Apple bridge. See [`docs/ci.html`](docs/ci.html).
+CI runs on every push and pull request via GitHub Actions (`.github/workflows/ci.yml`): gofmt, vet, staticcheck and race-enabled tests on Linux, a Linux build, and a macOS job that also builds the Apple bridge. See [`docs/ci.html`](docs/ci.html).
+
+**Releasing:** push a version tag (`git tag v1.0.0 && git push origin v1.0.0`). The release workflow (`.github/workflows/release.yml`) tests, builds archives for macOS and Linux with the version stamped in, adds the Apple bridge to the Apple Silicon archive, and publishes them with checksums as a GitHub release.
 
 ### Project layout
 
 | Path | Purpose |
 |---|---|
-| `main.go` | Entry point: starts the Bubble Tea program |
+| `main.go` | Command-line flags (`--keys`, `--trust`, `--version`, ...) and starting the Bubble Tea program |
 | `internal/tui/model.go` | `Model` state, message types, per-target output cache helpers |
-| `internal/tui/update.go` | Key handling, command execution, sequences, parallel runs, live-status polling, AI prompt handling |
-| `internal/tui/view.go`, `styles.go` | Three-pane rendering and colours |
-| `internal/tui/config.go` | Config discovery, YAML parsing, `include:` resolution, `apps:` expansion |
+| `internal/tui/update.go` | Message and key handling, AI prompt handling |
+| `internal/tui/run.go` | Running targets: jobs, sequences, parallel runs, streaming output, SSH command building |
+| `internal/tui/live.go` | Per-domain `live:` status polling |
+| `internal/tui/keys.go`, `mouse.go` | The key binding table and help text; trackpad/mouse handling |
+| `internal/tui/view.go`, `styles.go` | Three-pane rendering, list scrolling and colours |
+| `internal/tui/config.go` | Config discovery, strict YAML parsing, `include:` resolution, `run:` splitting, `apps:` expansion |
+| `internal/tui/trust.go` | Folder trust for `./mt.yaml` |
 | `internal/tui/data.go` | `Workspace`/`Domain`/`Target` types and the built-in default targets |
 | `internal/llm/` | Provider dispatch (`llm.go`), OpenAI-compatible HTTP client (`openai.go`), Apple bridge client (`apple.go`) |
 | `cmd/apple-llm/` | Swift source and entitlements for `mt-apple-bridge` |

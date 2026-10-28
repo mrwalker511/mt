@@ -28,6 +28,6 @@ Task {
 RunLoop.main.run()
 #else
 import Foundation
-fputs("error: FoundationModels is not available — requires macOS 26+ with Apple Intelligence enabled\n", stderr)
+fputs("error: FoundationModels is not available: requires macOS 26+ with Apple Intelligence enabled\n", stderr)
 exit(1)
 #endif

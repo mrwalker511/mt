@@ -250,61 +250,7 @@ func TestUpdate_Enter_WithCommand_SetsRunning(t *testing.T) {
 	}
 }
 
-// --- cmdResultMsg ---
-
-func TestUpdate_CmdResult_Success(t *testing.T) {
-	m := Model{running: true, liveStatus: make(map[string]string)}
-	m = send(m, cmdResultMsg{output: "  hello world  "})
-	if m.running {
-		t.Error("expected running=false after result")
-	}
-	if m.output != "hello world" {
-		t.Errorf("output: got %q, want %q", m.output, "hello world")
-	}
-	if m.cmdErr != "" {
-		t.Errorf("expected empty cmdErr, got %q", m.cmdErr)
-	}
-}
-
-func TestUpdate_CmdResult_Error(t *testing.T) {
-	m := Model{running: true, liveStatus: make(map[string]string)}
-	m = send(m, cmdResultMsg{output: "partial output", err: errors.New("exit status 1")})
-	if m.running {
-		t.Error("expected running=false after error result")
-	}
-	if m.cmdErr == "" {
-		t.Error("expected cmdErr to be set")
-	}
-	if m.output != "partial output" {
-		t.Errorf("output: got %q, want %q", m.output, "partial output")
-	}
-}
-
-func TestUpdate_CmdResult_EmptyOutput(t *testing.T) {
-	m := Model{running: true, liveStatus: make(map[string]string)}
-	m = send(m, cmdResultMsg{output: "   "})
-	if m.output != "" {
-		t.Errorf("expected empty output after trimming, got %q", m.output)
-	}
-}
-
 // --- Live status polling ---
-
-func TestUpdate_StatusUpdate_WritesToMap(t *testing.T) {
-	m := Model{liveStatus: make(map[string]string)}
-	m = send(m, statusUpdateMsg{key: "git.branch", status: "main"})
-	if m.liveStatus["git.branch"] != "main" {
-		t.Errorf("got %q, want %q", m.liveStatus["git.branch"], "main")
-	}
-}
-
-func TestUpdate_StatusUpdate_Overwrites(t *testing.T) {
-	m := Model{liveStatus: map[string]string{"git.branch": "old"}}
-	m = send(m, statusUpdateMsg{key: "git.branch", status: "feature/x"})
-	if m.liveStatus["git.branch"] != "feature/x" {
-		t.Errorf("got %q, want %q", m.liveStatus["git.branch"], "feature/x")
-	}
-}
 
 func TestUpdate_Tick_ReturnsNewCmd(t *testing.T) {
 	m := Model{liveStatus: make(map[string]string)}
@@ -340,109 +286,7 @@ func TestView_TooNarrow(t *testing.T) {
 
 // --- domainLiveHeader ---
 
-func TestDomainLiveHeader_UnknownDomain(t *testing.T) {
-	m := testModel() // "Domain A", "Domain B" — no live-status mapping
-	if got := m.domainLiveHeader(); got != "" {
-		t.Errorf("expected empty for unknown domain, got %q", got)
-	}
-}
-
-func TestDomainLiveHeader_GitNoBranch(t *testing.T) {
-	m := Model{
-		domains:    []Domain{{Name: "Context/Git"}},
-		liveStatus: make(map[string]string),
-	}
-	if got := m.domainLiveHeader(); got != "" {
-		t.Errorf("expected empty when no branch data, got %q", got)
-	}
-}
-
-func TestDomainLiveHeader_GitBranchOnly(t *testing.T) {
-	m := Model{
-		domains:    []Domain{{Name: "Context/Git"}},
-		liveStatus: map[string]string{"git.branch": "main"},
-	}
-	got := m.domainLiveHeader()
-	if !strings.Contains(got, "main") {
-		t.Errorf("expected branch name in header, got %q", got)
-	}
-	if strings.Contains(got, "modified") {
-		t.Error("should not show dirty count when git.dirty is not set")
-	}
-}
-
-func TestDomainLiveHeader_GitBranchAndDirty(t *testing.T) {
-	m := Model{
-		domains:    []Domain{{Name: "Context/Git"}},
-		liveStatus: map[string]string{"git.branch": "feature/x", "git.dirty": "3 modified"},
-	}
-	got := m.domainLiveHeader()
-	if !strings.Contains(got, "feature/x") {
-		t.Errorf("expected branch in header, got %q", got)
-	}
-	if !strings.Contains(got, "3 modified") {
-		t.Errorf("expected dirty count in header, got %q", got)
-	}
-}
-
-func TestDomainLiveHeader_InfraNoData(t *testing.T) {
-	m := Model{
-		domains:    []Domain{{Name: "Infrastructure"}},
-		liveStatus: make(map[string]string),
-	}
-	if got := m.domainLiveHeader(); got != "" {
-		t.Errorf("expected empty when no docker data, got %q", got)
-	}
-}
-
-func TestDomainLiveHeader_InfraPostgresOnly(t *testing.T) {
-	m := Model{
-		domains:    []Domain{{Name: "Infrastructure"}},
-		liveStatus: map[string]string{"docker.postgres": "Up 2h"},
-	}
-	got := m.domainLiveHeader()
-	if !strings.Contains(got, "postgres: Up 2h") {
-		t.Errorf("expected postgres status in header, got %q", got)
-	}
-}
-
-func TestDomainLiveHeader_InfraBothServices(t *testing.T) {
-	m := Model{
-		domains: []Domain{{Name: "Infrastructure"}},
-		liveStatus: map[string]string{
-			"docker.postgres": "Up 2h",
-			"docker.redis":    "stopped",
-		},
-	}
-	got := m.domainLiveHeader()
-	if !strings.Contains(got, "postgres") || !strings.Contains(got, "redis") {
-		t.Errorf("expected both services in header, got %q", got)
-	}
-}
-
-func TestDomainLiveHeader_OutOfBounds(t *testing.T) {
-	m := Model{
-		domains:      []Domain{},
-		domainCursor: 0,
-		liveStatus:   make(map[string]string),
-	}
-	if got := m.domainLiveHeader(); got != "" {
-		t.Errorf("expected empty for out-of-bounds cursor, got %q", got)
-	}
-}
-
 // --- renderRightPane with live header ---
-
-func TestRenderRightPane_LiveHeaderShown(t *testing.T) {
-	m := Model{
-		domains:    []Domain{{Name: "Context/Git", Targets: []Target{{Name: "Git Status", Status: "hint"}}}},
-		liveStatus: map[string]string{"git.branch": "main"},
-	}
-	got := m.renderRightPane(40, 20)
-	if !strings.Contains(got, "main") {
-		t.Errorf("expected branch name in right pane output, got %q", got)
-	}
-}
 
 // --- c key (clear output) ---
 
@@ -471,48 +315,6 @@ func TestUpdate_ClearKey_NoopWhenEmpty(t *testing.T) {
 }
 
 // --- run badges ---
-
-func TestUpdate_Badge_SetOnSuccess(t *testing.T) {
-	m := Model{
-		running:       true,
-		pendingTarget: "Domain/Target",
-		liveStatus:    make(map[string]string),
-		runStates:     make(map[string]runResult),
-		targetOutputs: make(map[string]outputRecord),
-	}
-	m = send(m, cmdResultMsg{output: "ok"})
-	if m.runStates["Domain/Target"] != runSuccess {
-		t.Errorf("expected runSuccess, got %v", m.runStates["Domain/Target"])
-	}
-}
-
-func TestUpdate_Badge_SetOnFailure(t *testing.T) {
-	m := Model{
-		running:       true,
-		pendingTarget: "Domain/Target",
-		liveStatus:    make(map[string]string),
-		runStates:     make(map[string]runResult),
-		targetOutputs: make(map[string]outputRecord),
-	}
-	m = send(m, cmdResultMsg{output: "", err: errors.New("exit 1")})
-	if m.runStates["Domain/Target"] != runFailure {
-		t.Errorf("expected runFailure, got %v", m.runStates["Domain/Target"])
-	}
-}
-
-func TestUpdate_Badge_PendingTargetCleared(t *testing.T) {
-	m := Model{
-		running:       true,
-		pendingTarget: "Domain/Target",
-		liveStatus:    make(map[string]string),
-		runStates:     make(map[string]runResult),
-		targetOutputs: make(map[string]outputRecord),
-	}
-	m = send(m, cmdResultMsg{output: "done"})
-	if m.pendingTarget != "" {
-		t.Errorf("expected pendingTarget cleared, got %q", m.pendingTarget)
-	}
-}
 
 // --- targetNamesWithBadges ---
 
@@ -625,30 +427,6 @@ func TestUpdate_WorkspaceSwitch_ClearsOutput(t *testing.T) {
 	}
 }
 
-func TestHasGitDomain_True(t *testing.T) {
-	m := Model{
-		domains: []Domain{
-			{Name: "App Launch"},
-			{Name: "Context/Git"},
-		},
-	}
-	if !m.hasDomain("Context/Git") {
-		t.Error("expected hasDomain=true when Context/Git domain is present")
-	}
-}
-
-func TestHasDockerDomain_False(t *testing.T) {
-	m := Model{
-		domains: []Domain{
-			{Name: "App Launch"},
-			{Name: "Context/Git"},
-		},
-	}
-	if m.hasDomain("Infrastructure") {
-		t.Error("expected hasDomain=false when no Infrastructure domain")
-	}
-}
-
 func TestUpdate_HelpToggle(t *testing.T) {
 	m := Model{liveStatus: make(map[string]string), runStates: make(map[string]runResult)}
 	m = press(m, key('?'))
@@ -710,18 +488,6 @@ func TestUpdate_RightPane_ScrollUp(t *testing.T) {
 	m = press(m, key('k'))
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset to clamp at 0, got %d", m.scrollOffset)
-	}
-}
-
-func TestUpdate_ScrollOffset_ResetOnNewOutput(t *testing.T) {
-	m := testModel()
-	m.targetOutputs = make(map[string]outputRecord)
-	m.runStates = make(map[string]runResult)
-	m.scrollOffset = 10
-	m.pendingTarget = m.runKey("Domain A", "T1")
-	m = send(m, cmdResultMsg{output: "fresh output", err: nil})
-	if m.scrollOffset != 0 {
-		t.Errorf("expected scrollOffset=0 after cmdResultMsg, got %d", m.scrollOffset)
 	}
 }
 
@@ -793,7 +559,7 @@ func TestUpdate_HotReload_UpdatesWorkspaces(t *testing.T) {
 	m.scrollOffset = 5
 	m.showHelp = true
 
-	// Press R — will call LoadWorkspaces() which falls back to defaults since no config file
+	// Press R: this calls LoadWorkspaces() which falls back to defaults since no config file
 	m = press(m, key('R'))
 
 	if m.domainCursor != 0 {
@@ -818,7 +584,6 @@ func TestUpdate_HotReload_UpdatesWorkspaces(t *testing.T) {
 func testModelWithSelect() Model {
 	m := testModel()
 	m.selectedTargets = make(map[string]bool)
-	m.parallelOutputs = make(map[string]string)
 	m.activePane = paneMiddle
 	return m
 }
@@ -878,27 +643,6 @@ func TestUpdate_WorkspaceSwitchClearsSelection(t *testing.T) {
 	}
 }
 
-func TestUpdate_ParallelRun_CombinesOutput(t *testing.T) {
-	m := testModelWithSelect()
-	m.running = false
-
-	m = send(m, parallelCmdResultMsg{key: "k1", label: "Alpha", output: "out-a", err: nil})
-	if m.running {
-		t.Error("should not be done yet — second result pending")
-	}
-
-	// Simulate a second in-flight result arriving (set pending manually)
-	m.multiRunPending = 1
-	m.parallelOutputs["Beta"] = "out-b"
-	m = send(m, parallelCmdResultMsg{key: "k2", label: "Alpha", output: "out-a2", err: nil})
-	if m.running {
-		t.Error("should be done after last result")
-	}
-	if !strings.Contains(m.output, "=== Alpha ===") {
-		t.Errorf("expected combined output header, got: %q", m.output)
-	}
-}
-
 // --- Clipboard / Save messages ---
 
 func TestUpdate_ClipboardMsg_Success(t *testing.T) {
@@ -935,43 +679,20 @@ func TestUpdate_SaveOutputMsg_Error(t *testing.T) {
 
 // --- Sequence helpers ---
 
-func TestModel_ResolveSequenceTargets(t *testing.T) {
-	m := testModel()
-	m.selectedTargets = make(map[string]bool)
-
-	steps, _ := m.resolveSequenceTargets([]string{"T3", "T1"})
-	if len(steps) != 2 {
-		t.Fatalf("got %d steps, want 2", len(steps))
-	}
-	if steps[0].Name != "T3" || steps[1].Name != "T1" {
-		t.Errorf("unexpected order: %v", []string{steps[0].Name, steps[1].Name})
-	}
-}
-
-func TestModel_ResolveSequenceTargets_MissingIsError(t *testing.T) {
-	m := testModel()
-	m.selectedTargets = make(map[string]bool)
-
-	steps, err := m.resolveSequenceTargets([]string{"T1", "NonExistent"})
-	if err == nil || !strings.Contains(err.Error(), "NonExistent") {
-		t.Errorf("expected error naming the missing step, got steps=%v err=%v", steps, err)
-	}
-}
-
 func TestModel_FindTargetByRunKey(t *testing.T) {
 	m := testModel()
 	m.selectedTargets = make(map[string]bool)
 
 	k := m.runKey("Domain A", "T2")
-	tgt, ok := m.findTargetByRunKey(k)
+	domain, tgt, ok := m.findTargetByRunKey(k)
 	if !ok {
 		t.Fatal("expected to find T2")
 	}
-	if tgt.Name != "T2" {
-		t.Errorf("got %q, want T2", tgt.Name)
+	if tgt.Name != "T2" || domain != "Domain A" {
+		t.Errorf("got %q in %q, want T2 in Domain A", tgt.Name, domain)
 	}
 
-	_, ok = m.findTargetByRunKey("no/such/key")
+	_, _, ok = m.findTargetByRunKey("no/such/key")
 	if ok {
 		t.Error("expected not found for unknown key")
 	}
@@ -990,7 +711,7 @@ func TestEffectiveCmd_NoHost(t *testing.T) {
 func TestEffectiveCmd_WithHost(t *testing.T) {
 	tgt := Target{Host: "user@host", Cmd: []string{"./deploy.sh", "prod"}}
 	got := effectiveCmd(tgt)
-	want := []string{"ssh", "user@host", "./deploy.sh", "prod"}
+	want := []string{"ssh", "-o", "BatchMode=yes", "user@host", "./deploy.sh", "prod"}
 	if len(got) != len(want) {
 		t.Fatalf("len: got %d, want %d", len(got), len(want))
 	}
@@ -1002,72 +723,6 @@ func TestEffectiveCmd_WithHost(t *testing.T) {
 }
 
 // --- Round 3: crash guards, output truncation, efficiency ---
-
-func TestUpdate_SequenceAdvance_EmptyCmd_ReturnsError(t *testing.T) {
-	m := Model{
-		running:    true,
-		liveStatus: make(map[string]string),
-		runStates:  make(map[string]runResult),
-		seqQueue:   []Target{{Name: "EmptyStep"}}, // no Cmd or Host
-	}
-	_, cmd := m.Update(cmdResultMsg{output: "step1 done", err: nil})
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd for sequence advance with empty next step")
-	}
-	msg := cmd()
-	result, ok := msg.(cmdResultMsg)
-	if !ok {
-		t.Fatalf("expected cmdResultMsg, got %T", msg)
-	}
-	if result.err == nil {
-		t.Error("expected error for sequence step with no command")
-	}
-	if !strings.Contains(result.err.Error(), "EmptyStep") {
-		t.Errorf("expected step name in error, got %q", result.err.Error())
-	}
-}
-
-func TestRunCmd_EmptySlice_ReturnsError(t *testing.T) {
-	cmd := runCmd(context.Background(), nil, "")
-	msg := cmd()
-	result, ok := msg.(cmdResultMsg)
-	if !ok {
-		t.Fatalf("expected cmdResultMsg, got %T", msg)
-	}
-	if result.err == nil {
-		t.Error("expected error for empty command slice")
-	}
-}
-
-func TestRunCmd_LargeOutput_Truncates(t *testing.T) {
-	cmd := runCmd(context.Background(), []string{"sh", "-c", "yes | head -c 1100000"}, "")
-	msg := cmd()
-	result, ok := msg.(cmdResultMsg)
-	if !ok {
-		t.Fatalf("expected cmdResultMsg, got %T", msg)
-	}
-	if result.err != nil {
-		t.Fatalf("unexpected error: %v", result.err)
-	}
-	if !strings.Contains(result.output, "truncated") {
-		t.Error("expected truncation notice in output for >1 MB command")
-	}
-}
-
-func TestRunParallelCmd_LargeOutput_Truncates(t *testing.T) {
-	cmd := runParallelCmd(context.Background(), "key1", "LargeLabel", []string{"sh", "-c", "yes | head -c 1100000"}, "")
-	msg := cmd()
-	result, ok := msg.(parallelCmdResultMsg)
-	if !ok {
-		t.Fatalf("expected parallelCmdResultMsg, got %T", msg)
-	}
-	if result.err != nil {
-		t.Fatalf("unexpected error: %v", result.err)
-	}
-	if !strings.Contains(result.output, "truncated") {
-		t.Error("expected truncation notice in output for >1 MB parallel command")
-	}
-}
 
 func TestSaveTargetOutput_LargeOutput_Truncates(t *testing.T) {
 	m := testModel()

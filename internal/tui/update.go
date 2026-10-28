@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,8 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,11 +17,6 @@ import (
 
 	"github.com/mrwalker511/mt/internal/llm"
 )
-
-// maxOutputBytes caps the output retained from any single command execution.
-// Output beyond this limit is truncated with a notice. Prevents OOM from
-// runaway commands that produce large amounts of data.
-const maxOutputBytes = 1 << 20 // 1 MB
 
 // maxInputRunes caps the length of the AI prompt bar input.
 const maxInputRunes = 500
@@ -59,9 +51,22 @@ func validateWorkspaces(workspaces []Workspace) error {
 	return nil
 }
 
-const pollInterval = 5 * time.Second
-
+// Update handles one message and keeps the list scroll positions in step with
+// the cursors and window size.
+// When the selected domain changes, its live status is fetched right away.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	prevLive, _ := m.liveKey()
+	next, cmd := m.update(msg)
+	next = next.syncListTops()
+	if key, _ := next.liveKey(); key != "" && key != prevLive {
+		var poll tea.Cmd
+		next, poll = next.pollLive()
+		cmd = tea.Batch(cmd, poll)
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -70,87 +75,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(append(m.pollCmds(), tickCmd())...)
+		next, poll := m.pollLive()
+		return next, tea.Batch(poll, tickCmd())
 
-	case statusUpdateMsg:
+	case liveStatusMsg:
+		delete(m.liveInFlight, msg.key)
 		m.liveStatus[msg.key] = msg.status
 		return m, nil
 
-	case cmdResultMsg:
-		output := strings.TrimSpace(msg.output)
+	case outputTickMsg:
+		if msg.run != m.runSeq || !m.running {
+			return m, nil
+		}
+		return m.refreshRunOutput(), outputTick(m.runSeq)
 
-		// Sequence in progress and step succeeded: advance to next step.
-		if msg.err == nil && len(m.seqQueue) > 0 {
-			if len(m.seqOutput)+len(output)+1 <= maxOutputBytes {
-				m.seqOutput += output + "\n"
-			} else {
-				m.seqOutput += "…(sequence output truncated)\n"
-			}
-			next := m.seqQueue[0]
-			m.seqQueue = m.seqQueue[1:]
-			execCmd := effectiveCmd(next)
-			if len(execCmd) == 0 {
-				nextName := next.Name
-				return m, func() tea.Msg {
-					return cmdResultMsg{err: fmt.Errorf("sequence step %q has no command", nextName)}
-				}
-			}
-			return m, runCmd(m.runCtx, execCmd, next.LaunchMsg)
-		}
-
-		// Sequence complete, sequence failed, or normal single command done.
-		m = m.finishRun()
-		output = strings.TrimSpace(m.seqOutput + output)
-		m.seqOutput = ""
-		m.seqQueue = nil
-		cmdErr := ""
-		if msg.err != nil {
-			cmdErr = msg.err.Error()
-		}
-		key := m.pendingTarget
-		m.pendingTarget = ""
-		if key != "" {
-			if msg.err != nil {
-				m.runStates[key] = runFailure
-			} else {
-				m.runStates[key] = runSuccess
-			}
-			// The user may have moved to another target while this one ran:
-			// file the result under the target that produced it.
-			if cur, _ := m.currentKey(); cur != key {
-				m.cacheOutput(key, output, cmdErr)
-				return m, nil
-			}
-		}
-		m.output, m.cmdErr, m.scrollOffset = output, cmdErr, 0
-		return m, nil
-
-	case parallelCmdResultMsg:
-		out := strings.TrimSpace(msg.output)
-		if msg.err != nil {
-			m.runStates[msg.key] = runFailure
-			out += "\n[ERROR: " + msg.err.Error() + "]"
-		} else {
-			m.runStates[msg.key] = runSuccess
-		}
-		m.parallelOutputs[msg.key] = "=== " + msg.label + " ===\n" + out
-		m.multiRunPending--
-		if m.multiRunPending == 0 {
-			m = m.finishRun()
-			keys := make([]string, 0, len(m.parallelOutputs))
-			for k := range m.parallelOutputs {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			parts := make([]string, 0, len(keys))
-			for _, k := range keys {
-				parts = append(parts, m.parallelOutputs[k])
-			}
-			m.output = strings.Join(parts, "\n\n")
-			m.parallelOutputs = make(map[string]string)
-			m.scrollOffset = 0
-		}
-		return m, nil
+	case jobDoneMsg:
+		return m.jobDone(msg), nil
 
 	case clipboardMsg:
 		if msg.err != nil {
@@ -260,8 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				cmd := m.confirmCmd
 				m.confirmCmd = nil
-				m = m.beginRun()
-				return m, runCmd(m.runCtx, cmd, "")
+				return m.startAICommand(cmd)
 			case "esc":
 				m.confirmCmd = nil
 				m.cmdErr = "AI command cancelled."
@@ -320,16 +259,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case actReload:
-			workspaces, llmCfg, err := LoadWorkspaces()
+			r, err := loadConfigFiles()
 			if err != nil {
 				m.output, m.cmdErr = "", "Config reload error: "+err.Error()
 			} else {
-				m.allWorkspaces = workspaces
-				m.llmConfig = llmCfg
+				m.allWorkspaces = r.workspaces
+				m.llmConfig = r.llm
 				m = m.selectWorkspace(0)
 				m.targetOutputs = make(map[string]outputRecord)
-				m.output = fmt.Sprintf("Config reloaded — %d workspace(s) loaded.", len(workspaces))
-				m.cmdErr = ""
+				m.output = fmt.Sprintf("Config reloaded: %d workspace(s) loaded.", len(r.workspaces))
+				m.cmdErr = r.notice
 			}
 
 		case actNextWorkspace:
@@ -354,24 +293,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Multi-select: run all selected targets in parallel.
 			if len(m.selectedTargets) > 0 {
-				m = m.beginRun()
-				var cmds []tea.Cmd
-				for key := range m.selectedTargets {
-					t, ok := m.findTargetByRunKey(key)
-					if !ok || len(t.Cmd) == 0 {
-						continue
-					}
-					cmds = append(cmds, runParallelCmd(m.runCtx, key, t.Name, effectiveCmd(t), t.LaunchMsg))
-				}
-				if len(cmds) == 0 {
-					m = m.finishRun()
-					m.cmdErr = "No executable targets selected."
-					return m, nil
-				}
-				m.multiRunPending = len(cmds)
-				m.parallelOutputs = make(map[string]string)
-				m.selectedTargets = make(map[string]bool)
-				return m, tea.Batch(cmds...)
+				return m.startSelected()
 			}
 
 			if target, ok := m.currentTarget(); ok {
@@ -396,7 +318,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case actPageUp, actPageDown, actTop, actBottom:
 			// These always scroll the output, whichever pane has focus.
-			maxOffset := max(strings.Count(m.output, "\n")+1-m.rightPanePageSize(), 0)
+			maxOffset := m.maxScroll()
 			switch act {
 			case actPageUp:
 				m.scrollOffset -= m.rightPanePageSize()
@@ -436,10 +358,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m = m.moveCursor(m.domainCursor, m.targetCursor+1)
 				}
 			case paneRight:
-				lineCount := strings.Count(m.output, "\n") + 1
-				if m.scrollOffset < lineCount-m.rightPanePageSize() {
-					m.scrollOffset++
-				}
+				m.scrollOffset = min(m.scrollOffset+1, m.maxScroll())
 			}
 		}
 		return m, nil
@@ -449,7 +368,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // quit cancels all in-flight work and exits the program.
-func (m Model) quit() (tea.Model, tea.Cmd) {
+func (m Model) quit() (Model, tea.Cmd) {
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -494,58 +413,6 @@ func (m Model) selectWorkspace(i int) Model {
 	return m
 }
 
-// beginRun marks a run as started, clears the right pane, and creates the
-// cancellable context the run's commands execute under (Esc cancels it).
-func (m Model) beginRun() Model {
-	parent := m.ctx
-	if parent == nil {
-		parent = context.Background()
-	}
-	m.runCtx, m.runCancel = context.WithCancel(parent)
-	m.running = true
-	m.output, m.cmdErr, m.scrollOffset = "", "", 0
-	m.showHelp = false
-	return m
-}
-
-// finishRun marks the current run as finished and releases its context.
-func (m Model) finishRun() Model {
-	if m.runCancel != nil {
-		m.runCancel()
-	}
-	m.running, m.runCtx, m.runCancel = false, nil, nil
-	return m
-}
-
-// startTarget runs target t (a single command or a sequence) from domain domainName.
-func (m Model) startTarget(domainName string, t Target) (Model, tea.Cmd) {
-	first := t
-	if len(t.Sequence) > 0 {
-		steps, err := m.resolveSequenceTargets(t.Sequence)
-		if err != nil {
-			m.output, m.cmdErr = "", err.Error()
-			return m, nil
-		}
-		first = steps[0]
-		m.seqQueue = steps[1:]
-		m.seqOutput = ""
-	}
-	cmd := effectiveCmd(first)
-	if len(cmd) == 0 {
-		m.seqQueue = nil
-		m.output = ""
-		if len(t.Sequence) > 0 {
-			m.cmdErr = fmt.Sprintf("Sequence step %q has no command.", first.Name)
-		} else {
-			m.cmdErr = "No command configured for this target."
-		}
-		return m, nil
-	}
-	m.pendingTarget = m.runKey(domainName, t.Name)
-	m = m.beginRun()
-	return m, runCmd(m.runCtx, cmd, first.LaunchMsg)
-}
-
 // currentTarget returns the currently selected target and whether it exists.
 func (m Model) currentTarget() (Target, bool) {
 	if m.domainCursor >= len(m.domains) {
@@ -556,159 +423,6 @@ func (m Model) currentTarget() (Target, bool) {
 		return Target{}, false
 	}
 	return targets[m.targetCursor], true
-}
-
-// effectiveCmd returns the command to run for a target, prepending ssh if Host is set.
-func effectiveCmd(t Target) []string {
-	if t.Host == "" || len(t.Cmd) == 0 {
-		return t.Cmd
-	}
-	return append([]string{"ssh", t.Host}, t.Cmd...)
-}
-
-// pollCmds returns the live-status probes relevant to the active workspace.
-func (m Model) pollCmds() []tea.Cmd {
-	var cmds []tea.Cmd
-	if m.hasDomain("Context/Git") {
-		cmds = append(cmds, pollGit(m.ctx))
-	}
-	if m.hasDomain("Infrastructure") {
-		cmds = append(cmds, pollDocker(m.ctx))
-	}
-	return cmds
-}
-
-// tickCmd schedules the next status poll cycle.
-func tickCmd() tea.Cmd {
-	return tea.Tick(pollInterval, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
-}
-
-// pollGit batches all git probes.
-func pollGit(ctx context.Context) tea.Cmd {
-	return tea.Batch(pollGitBranch(ctx), pollGitDirty(ctx))
-}
-
-func pollGitBranch(ctx context.Context) tea.Cmd {
-	return func() tea.Msg {
-		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(pollCtx, "git", "rev-parse", "--abbrev-ref", "HEAD").Output() //nolint:gosec
-		if err != nil {
-			return statusUpdateMsg{key: "git.branch", status: ""}
-		}
-		return statusUpdateMsg{key: "git.branch", status: strings.TrimSpace(string(out))}
-	}
-}
-
-func pollGitDirty(ctx context.Context) tea.Cmd {
-	return func() tea.Msg {
-		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(pollCtx, "git", "status", "--porcelain").Output() //nolint:gosec
-		if err != nil {
-			return statusUpdateMsg{key: "git.dirty", status: ""}
-		}
-		count := 0
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.TrimSpace(line) != "" {
-				count++
-			}
-		}
-		status := ""
-		if count > 0 {
-			status = strconv.Itoa(count) + " modified"
-		}
-		return statusUpdateMsg{key: "git.dirty", status: status}
-	}
-}
-
-// pollDocker batches all docker container probes.
-func pollDocker(ctx context.Context) tea.Cmd {
-	return tea.Batch(
-		pollDockerContainer(ctx, "postgres"),
-		pollDockerContainer(ctx, "redis"),
-	)
-}
-
-func pollDockerContainer(ctx context.Context, name string) tea.Cmd {
-	return func() tea.Msg {
-		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(pollCtx, "docker", "ps", "--filter", "name="+name, "--format", "{{.Status}}").Output() //nolint:gosec
-		status := "stopped"
-		if err == nil {
-			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
-				status = trimmed
-			}
-		}
-		return statusUpdateMsg{key: "docker." + name, status: status}
-	}
-}
-
-// cappedBuffer keeps the first limit bytes written to it and discards the rest,
-// so a runaway command cannot exhaust memory. Writes never fail, so the command
-// is not killed by a broken pipe once the cap is reached.
-type cappedBuffer struct {
-	buf       bytes.Buffer
-	limit     int
-	truncated bool
-}
-
-func (b *cappedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	if room := b.limit - b.buf.Len(); n > room {
-		p = p[:max(room, 0)]
-		b.truncated = true
-	}
-	b.buf.Write(p)
-	return n, nil
-}
-
-// execCapture runs cmd and returns its combined stdout/stderr, capped at
-// maxOutputBytes. launchMsg (or a generic note) replaces empty output on success.
-func execCapture(ctx context.Context, cmd []string, launchMsg string) (string, error) {
-	if len(cmd) == 0 {
-		return "", fmt.Errorf("no command to execute")
-	}
-	c := exec.CommandContext(ctx, cmd[0], cmd[1:]...) //nolint:gosec
-	out := &cappedBuffer{limit: maxOutputBytes}
-	c.Stdout, c.Stderr = out, out
-	// Don't hang on cancellation if a killed command left children holding the pipe.
-	c.WaitDelay = 2 * time.Second
-	err := c.Run()
-	if err != nil && ctx.Err() != nil {
-		err = errors.New("cancelled")
-	}
-	output := strings.TrimSpace(out.buf.String())
-	if out.truncated {
-		output += "\n…(output truncated at 1 MB)"
-	}
-	if output == "" && err == nil {
-		output = launchMsg
-		if output == "" {
-			output = "(command completed — no output)"
-		}
-	}
-	return output, err
-}
-
-// runCmd executes cmd asynchronously and returns the result as a cmdResultMsg.
-func runCmd(ctx context.Context, cmd []string, launchMsg string) tea.Cmd {
-	return func() tea.Msg {
-		output, err := execCapture(ctx, cmd, launchMsg)
-		return cmdResultMsg{output: output, err: err}
-	}
-}
-
-// runParallelCmd executes cmd asynchronously and returns the result as a
-// parallelCmdResultMsg tagged with the target's runKey and display label.
-func runParallelCmd(ctx context.Context, key, label string, cmd []string, launchMsg string) tea.Cmd {
-	return func() tea.Msg {
-		output, err := execCapture(ctx, cmd, launchMsg)
-		return parallelCmdResultMsg{key: key, label: label, output: output, err: err}
-	}
 }
 
 // copyToClipboard writes text to the system clipboard asynchronously.
@@ -754,9 +468,9 @@ func (m Model) buildSystemPrompt() string {
 		}
 	}
 	sb.WriteString("\nRespond with EXACTLY ONE of (nothing else):\n")
-	sb.WriteString("RUN:<target_name>   — run an existing target by its exact name\n")
-	sb.WriteString("CMD:<json_array>    — run a new command as a JSON array, e.g. CMD:[\"osascript\",\"-e\",\"...\"]\n")
-	sb.WriteString("INFO:<text>         — answer a question in ≤2 sentences\n\n")
+	sb.WriteString("RUN:<target_name>   - run an existing target by its exact name\n")
+	sb.WriteString("CMD:<json_array>    - run a new command as a JSON array, e.g. CMD:[\"osascript\",\"-e\",\"...\"]\n")
+	sb.WriteString("INFO:<text>         - answer a question in ≤2 sentences\n\n")
 	sb.WriteString("For Outlook meetings use CMD with osascript. Outlook AppleScript properties: subject, start time, end time, location.\n")
 	sb.WriteString("To add an attendee: make new attendee at end of attendees of newEvent with properties {email address:{address:\"EMAIL\"}}\n")
 	sb.WriteString("Current time: " + time.Now().Format("Monday, January 2 2006 15:04") + "\n")

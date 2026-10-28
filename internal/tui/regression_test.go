@@ -1,12 +1,10 @@
 package tui
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -69,20 +67,6 @@ func TestView_FitsTerminalHeight(t *testing.T) {
 	}
 }
 
-func TestUpdate_Result_CachedUnderRunningTarget(t *testing.T) {
-	m := testModel()
-	m.pendingTarget = m.runKey("Domain A", "T1")
-	m.running = true
-	m.targetCursor = 1 // user moved to T2 while T1 ran
-	m = send(m, cmdResultMsg{output: "t1 output"})
-	if m.output != "" {
-		t.Errorf("T1's output must not show on T2, got %q", m.output)
-	}
-	if rec := m.targetOutputs[m.runKey("Domain A", "T1")]; rec.output != "t1 output" {
-		t.Errorf("expected T1 output cached, got %q", rec.output)
-	}
-}
-
 func TestUpdate_Sequence_MissingStep_DoesNotRun(t *testing.T) {
 	m := testModel()
 	m.domains[0].Targets = append(m.domains[0].Targets,
@@ -96,39 +80,6 @@ func TestUpdate_Sequence_MissingStep_DoesNotRun(t *testing.T) {
 	}
 	if !strings.Contains(m.cmdErr, "Tset") {
 		t.Errorf("expected error naming the missing step, got %q", m.cmdErr)
-	}
-}
-
-func TestUpdate_Esc_CancelsRunningCommand(t *testing.T) {
-	m := testModel()
-	m.ctx, m.cancel = context.WithCancel(context.Background())
-	defer m.cancel()
-	m, cmd := m.startTarget("Domain A", Target{Name: "Sleep", Cmd: []string{"sleep", "30"}})
-	if !m.running || cmd == nil {
-		t.Fatal("expected the command to start")
-	}
-	m = press(m, tea.KeyMsg{Type: tea.KeyEsc})
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
-	select {
-	case msg := <-done:
-		m = send(m, msg)
-		if m.running {
-			t.Error("expected running=false once the cancelled command reports back")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Esc did not stop the running command")
-	}
-}
-
-func TestUpdate_ParallelRun_SameNameDifferentDomains(t *testing.T) {
-	m := testModelWithSelect()
-	m.running = true
-	m.multiRunPending = 2
-	m = send(m, parallelCmdResultMsg{key: "A/Open", label: "Open", output: "from A"})
-	m = send(m, parallelCmdResultMsg{key: "B/Open", label: "Open", output: "from B"})
-	if !strings.Contains(m.output, "from A") || !strings.Contains(m.output, "from B") {
-		t.Errorf("expected both outputs, got %q", m.output)
 	}
 }
 

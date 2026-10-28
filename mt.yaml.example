@@ -1,4 +1,4 @@
-# mt configuration — copy to the right location for your platform and customise.
+# mt configuration: copy to the right location for your platform and customise.
 #
 #   macOS:  ~/Library/Application Support/mt/config.yaml
 #   Linux:  ~/.config/mt/config.yaml
@@ -6,7 +6,7 @@
 #
 # ─── Quick-start: apps shorthand ──────────────────────────────────────────────
 # List Mac app names under apps: and mt generates the open -a command for you.
-# No run/status/launch_msg needed — just the name as macOS knows it.
+# No run/status/launch_msg needed: just the name as macOS knows it.
 #
 #   domains:
 #     - name: "My Apps"
@@ -23,31 +23,31 @@
 # ──────────────────────────────────────────────────────────────────────────────
 #
 # Full field reference:
-#   name       — display label (required)
-#   status     — hint text shown in the right pane before any command runs
-#   run        — command to execute on Enter, written as you would type it:
+#   name:       display label (required)
+#   status:     hint text shown in the right pane before any command runs
+#   run:        command to execute on Enter, written as you would type it:
 #                  run: git log --oneline -n 10
 #                  run: open -a "Microsoft Word"
 #                Quotes group words. There is no shell: pipes, redirects, $VARS
 #                and ~ are rejected; use cmd: ["sh", "-c", "..."] if you need them.
 #                On SSH targets (host: set) the string goes to the remote shell
 #                unchanged, so pipes and $VARS work there.
-#   cmd        — the same as run, as an explicit list: ["git", "status"].
+#   cmd:        the same as run, as an explicit list: ["git", "status"].
 #                Use it when an argument is awkward to quote (e.g. AppleScript).
 #                A target sets run or cmd, not both; omit both for a hint-only target.
-#   launch_msg — message shown when the command exits 0 with no output (e.g. open -a)
-#   sequence   — ordered list of target names to run in series (stops on failure)
-#   host       — SSH host ([user@]hostname); the command runs as: ssh host <command>
-#   include    — (top-level) list of YAML files to merge; ~/ allowed; must be within $HOME
-#   apps       — (domain-level) list of Mac app names, each expanded to `open -a <name>`
-#   llm        — (top-level) AI assistant settings, see below
+#   launch_msg: message shown when the command exits 0 with no output (e.g. open -a)
+#   sequence:   ordered list of target names to run in series (stops on failure)
+#   host:       SSH host ([user@]hostname); the command runs as: ssh host <command>
+#   include:    (top-level) list of YAML files to merge; ~/ allowed; must be within $HOME
+#   apps:       (domain-level) list of Mac app names, each expanded to `open -a <name>`
+#   llm:        (top-level) AI assistant settings, see below
 #
 # ─── AI / LLM ─────────────────────────────────────────────────────────────────
 # Press [/] in mt to open the AI prompt bar. Type a natural-language request and
 # press Enter. The LLM will route it to an existing target, generate a new
 # command (e.g. an osascript to create a meeting), or answer your question.
 #
-# ── Apple Foundation Models (on-device, private, no API key — macOS 26+) ──────
+# ── Apple Foundation Models (on-device, private, no API key, macOS 26+) ──────
 # Requires Apple Intelligence enabled. Build the bridge binary once:
 #   make apple-bridge            # produces ./mt-apple-bridge
 #   cp mt-apple-bridge $(dirname $(which mt))/   # place alongside the mt binary
@@ -56,7 +56,7 @@
 #   provider: apple
 #   # bridge_path: /usr/local/bin/mt-apple-bridge   # optional; searched in PATH by default
 #
-# ── llama.cpp — Metal-accelerated local inference (Apple Silicon) ──────────────
+# ── llama.cpp: Metal-accelerated local inference (Apple Silicon) ──────────────
 # Runs entirely on-device using the Metal GPU; works with any GGUF model.
 #   brew install llama.cpp
 #
@@ -73,25 +73,25 @@
 #   --threads 10        matches M5 Max's 10 performance cores
 #
 # Gemma 4 model size guide for 36 GB:
-#   gemma-4-27b-it-Q4_K_M.gguf  (~16 GB) — best speed/quality balance
-#   gemma-4-27b-it-Q8_0.gguf    (~29 GB) — highest quality, still fits
+#   gemma-4-27b-it-Q4_K_M.gguf  (~16 GB): best speed/quality balance
+#   gemma-4-27b-it-Q8_0.gguf    (~29 GB): highest quality, but tight on 36 GB
 #
 # llm:
 #   provider: llamacpp
 #   model: gemma-4-27b-it   # informational label; server uses the loaded model
 #   # base_url: http://localhost:8080   # default
 #
-# ── MLX — fastest on-device option for Apple Silicon ──────────────────────────
+# ── MLX: fastest on-device option for Apple Silicon ──────────────────────────
 # mlx_lm.server speaks the OpenAI /v1/chat/completions API on port 8000.
 # Models are downloaded automatically on first run from Hugging Face.
 #   pip install mlx-lm
 #
-# Gemma 4 (27B, 4-bit — fits in 16 GB, recommended for M5 Max):
+# Gemma 4 (27B, 4-bit: fits in 16 GB, recommended for M5 Max):
 #   python -m mlx_lm.server \
 #     --model mlx-community/gemma-4-27b-it-4bit \
 #     --port 8000
 #
-# GPT-OSS 20B (4-bit — ~12 GB, faster responses):
+# GPT-OSS 20B (4-bit: ~12 GB, faster responses):
 #   python -m mlx_lm.server \
 #     --model mlx-community/gpt-oss-20B-instruct-4bit \
 #     --port 8000
@@ -214,6 +214,9 @@ workspaces:
             launch_msg: "Opening iTerm2…"
 
       - name: "Infrastructure"
+        # live: runs while this domain is selected (every 5s) and shows the
+        # first 3 lines of its output above the right pane.
+        live: docker ps --format "{{.Names}} {{.Status}}"
         targets:
           - name: "Docker Up"
             status: "Docker: Stopped\n\nPress [Enter] to start containers"
@@ -232,6 +235,7 @@ workspaces:
                   "table {{.Names}}\t{{.Status}}\t{{.Ports}}"]
 
       - name: "Context/Git"
+        live: git status --short --branch
         targets:
           - name: "Git Status"
             status: "Press [Enter] to run git status"

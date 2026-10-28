@@ -29,18 +29,18 @@ func TestGenerateOpenAI_HTTP500_ReturnsError(t *testing.T) {
 func TestGenerateOpenAI_LargeBody_NotOOM(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Write 2 MB of valid-ish JSON prefix to test the size cap.
-		// The decoder will fail or truncate — either way no OOM.
+		// The decoder will fail or truncate; either way no OOM.
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"`))
 		for i := 0; i < 2*1024*1024; i++ {
 			w.Write([]byte("x"))
 		}
-		// intentionally no closing — the LimitReader cuts it off cleanly
+		// intentionally no closing: the LimitReader cuts it off cleanly
 	}))
 	defer srv.Close()
 
 	cfg := Config{Provider: "litellm", BaseURL: srv.URL}
-	// expect either a decode error (truncated JSON) or a valid response — not a hang or OOM
+	// expect either a decode error (truncated JSON) or a valid response, not a hang or OOM
 	_, _ = Generate(context.Background(), cfg, "system", "hello")
 }
 

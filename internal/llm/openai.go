@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const maxResponseBytes = 1 << 20 // 1 MB — ample for any chat completion
+const maxResponseBytes = 1 << 20 // 1 MB, ample for any chat completion
 
 // llmHTTPClient caps stalled TCP handshakes that context cancellation cannot reach.
 // 35s > the 30s context timeout used at call sites, so the context fires first
@@ -74,7 +74,7 @@ func generateOpenAICompat(ctx context.Context, baseURL, model, apiKey, systemPro
 
 	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("not reachable at %s — is the server running? (%w)", baseURL, err)
+		return "", fmt.Errorf("not reachable at %s; is the server running? (%w)", baseURL, err)
 	}
 	defer resp.Body.Close()
 

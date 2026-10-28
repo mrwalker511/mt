@@ -5,7 +5,7 @@ package tui
 
 import (
 	"context"
-	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,20 +25,6 @@ const (
 	paneRight  pane = 2
 )
 
-// cmdResultMsg carries the result of an async command execution back to Update.
-type cmdResultMsg struct {
-	output string
-	err    error
-}
-
-// parallelCmdResultMsg carries the result of one command in a parallel multi-select run.
-type parallelCmdResultMsg struct {
-	key    string // runKey of the target
-	label  string // display name for combined output header
-	output string
-	err    error
-}
-
 // llmResponseMsg carries the result of an async LLM query back to Update.
 type llmResponseMsg struct {
 	response string
@@ -52,15 +38,6 @@ type clipboardMsg struct{ err error }
 type saveOutputMsg struct {
 	path string
 	err  error
-}
-
-// tickMsg fires on each polling interval.
-type tickMsg time.Time
-
-// statusUpdateMsg carries a single live-status value back to Update.
-type statusUpdateMsg struct {
-	key    string
-	status string
 }
 
 // runResult records the outcome of the last execution of a target.
@@ -86,6 +63,8 @@ type Model struct {
 	activePane   pane
 	domainCursor int
 	targetCursor int
+	domainTop    int // first visible row of the domain list
+	targetTop    int // first visible row of the target list
 
 	domains       []Domain // active workspace's domains
 	allWorkspaces []Workspace
@@ -93,13 +72,14 @@ type Model struct {
 
 	quitting bool
 
-	output  string // last command output to display in right pane
+	output  string // output shown in the right pane (live while a run streams)
 	cmdErr  string // last command error message
-	running bool   // true while a command is executing
+	running bool   // true while a run is in progress
 
-	liveStatus    map[string]string    // live probe results keyed by semantic name
+	liveStatus    map[string]string    // live: command output keyed by domain runKey
+	liveInFlight  map[string]bool      // live: commands currently running
 	runStates     map[string]runResult // last run outcome keyed by runKey()
-	pendingTarget string               // key of the target currently executing
+	pendingTarget string               // key of the single target running; "" for multi or AI runs
 
 	targetOutputs map[string]outputRecord // cached output per target, keyed by runKey()
 	scrollOffset  int                     // first visible line in right-pane output
@@ -107,20 +87,17 @@ type Model struct {
 	showHelp bool // true when the ? help overlay is shown in the right pane
 
 	// multi-select (Space to toggle, Enter runs all in parallel)
-	selectedTargets map[string]bool   // set of runKeys checked for parallel execution
-	parallelOutputs map[string]string // per-runKey output accumulator during a parallel run
-	multiRunPending int               // number of parallel commands still in flight
+	selectedTargets map[string]bool // set of runKeys checked for parallel execution
 
-	// sequence execution (target.Sequence drives steps in order)
-	seqQueue  []Target // remaining steps not yet started
-	seqOutput string   // output accumulated from completed sequence steps
+	// the current run (see run.go)
+	jobs       []*job
+	runSeq     int                // generation of the current run; stale messages are ignored
+	runStarted time.Time          // when the current run began, for the elapsed time
+	runCancel  context.CancelFunc // stops the current run's commands (Esc)
 
 	// ctx is cancelled when the user quits, terminating all in-flight commands.
 	ctx    context.Context
 	cancel context.CancelFunc
-	// runCtx scopes the current run's commands; runCancel stops them (Esc).
-	runCtx    context.Context
-	runCancel context.CancelFunc
 
 	// AI natural-language input (/ key)
 	llmConfig  llm.Config
@@ -135,20 +112,9 @@ type Model struct {
 	lastClickAt  time.Time
 }
 
-// hasDomain reports whether the active workspace has a domain with the given name.
-// Live status polling is keyed off the "Context/Git" and "Infrastructure" names.
-func (m Model) hasDomain(name string) bool {
-	for _, d := range m.domains {
-		if d.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 // runKey returns a unique key for a target, scoped to the current workspace name.
 // When the workspace has no name (default single-workspace), the key is
-// "DomainName/TargetName" — identical to the pre-workspace format.
+// "DomainName/TargetName", identical to the pre-workspace format.
 func (m Model) runKey(domainName, targetName string) string {
 	ws := ""
 	if m.workspaceIdx < len(m.allWorkspaces) {
@@ -171,19 +137,25 @@ func (m Model) currentKey() (string, bool) {
 
 // rightPanePageSize returns the number of output lines visible in the right pane:
 // the pane height minus the title (2 lines), the scroll indicator (1 line), the
-// live-status header (2 lines, when shown) and the trailing error (2 lines, when shown).
+// live-status header (its lines plus a blank, when shown), and the running
+// banner and trailing error (2 lines each, when shown).
 func (m Model) rightPanePageSize() int {
 	size := m.height - statusBarHeight - borderHeight - 3
-	if m.domainLiveHeader() != "" {
+	if s := m.liveStatusText(); s != "" {
+		size -= strings.Count(s, "\n") + 2
+	}
+	if m.running {
 		size -= 2
 	}
 	if m.cmdErr != "" {
 		size -= 2
 	}
-	if size < 1 {
-		return 1
-	}
-	return size
+	return max(size, 1)
+}
+
+// maxScroll returns the largest useful scroll offset for the current output.
+func (m Model) maxScroll() int {
+	return max(strings.Count(m.output, "\n")+1-m.rightPanePageSize(), 0)
 }
 
 // cacheOutput stores output/cmdErr under key, capping output at maxCachedOutputBytes
@@ -217,7 +189,8 @@ func (m Model) restoreTargetOutput() Model {
 // New returns a freshly initialized Model. Workspaces are loaded from the user's
 // config file if one exists; otherwise the built-in defaults are used.
 func New() Model {
-	workspaces, llmCfg, err := LoadWorkspaces()
+	r, err := loadConfigFiles()
+	workspaces, llmCfg := r.workspaces, r.llm
 	var domains []Domain
 	if len(workspaces) > 0 {
 		domains = workspaces[0].Domains
@@ -232,52 +205,37 @@ func New() Model {
 		runStates:       make(map[string]runResult),
 		targetOutputs:   make(map[string]outputRecord),
 		selectedTargets: make(map[string]bool),
-		parallelOutputs: make(map[string]string),
 		ctx:             ctx,
 		cancel:          cancel,
 		llmConfig:       llmCfg,
 	}
-	if err != nil {
+	switch {
+	case err != nil:
 		m.cmdErr = "Config error (using built-in defaults): " + err.Error()
+	case r.notice != "":
+		m.cmdErr = r.notice
 	}
 	return m
 }
 
-// findTargetByRunKey searches the active workspace for a target matching key.
-func (m Model) findTargetByRunKey(key string) (Target, bool) {
+// findTargetByRunKey searches the active workspace for a target matching key
+// and returns it with its domain's name.
+func (m Model) findTargetByRunKey(key string) (string, Target, bool) {
 	for _, d := range m.domains {
 		for _, t := range d.Targets {
 			if m.runKey(d.Name, t.Name) == key {
-				return t, true
+				return d.Name, t, true
 			}
 		}
 	}
-	return Target{}, false
+	return "", Target{}, false
 }
 
-// resolveSequenceTargets returns the Target structs for each name in order,
-// searching all domains of the active workspace. Unknown names are an error so a
-// typo can never silently drop a step (e.g. skip "Test" before "Deploy").
-func (m Model) resolveSequenceTargets(names []string) ([]Target, error) {
-	lookup := make(map[string]Target)
-	for _, d := range m.domains {
-		for _, t := range d.Targets {
-			lookup[t.Name] = t
-		}
-	}
-	out := make([]Target, 0, len(names))
-	for _, n := range names {
-		t, ok := lookup[n]
-		if !ok {
-			return nil, fmt.Errorf("sequence step %q not found in this workspace", n)
-		}
-		out = append(out, t)
-	}
-	return out, nil
-}
-
-// Init fires the initial status polls and starts the refresh tick.
-// Git and Docker polls are skipped when the active workspace has no relevant domains.
+// Init fetches the first domain's live status and starts the polling tick.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(append(m.pollCmds(), tickCmd())...)
+	cmds := []tea.Cmd{tickCmd()}
+	if key, cmd := m.liveKey(); key != "" {
+		cmds = append(cmds, probeLive(m.ctx, key, cmd))
+	}
+	return tea.Batch(cmds...)
 }
