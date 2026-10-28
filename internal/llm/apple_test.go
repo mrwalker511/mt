@@ -68,7 +68,7 @@ func TestApple_NotFound(t *testing.T) {
 }
 
 func TestApple_CancelReturnsContextError(t *testing.T) {
-	bridge := fakeBridge(t, `sleep 30`)
+	bridge := fakeBridge(t, `exec sleep 30`) // exec: the killed process is sleep itself
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()

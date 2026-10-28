@@ -17,8 +17,13 @@ func trustEnv(t *testing.T) (project string) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	cfgDir := filepath.Join(home, "cfg")
-	t.Setenv("XDG_CONFIG_HOME", cfgDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	// Ask Go where the user config lives: XDG_CONFIG_HOME on Linux, but always
+	// ~/Library/Application Support on macOS.
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(filepath.Join(cfgDir, "mt"), 0o755); err != nil {
 		t.Fatal(err)
 	}
