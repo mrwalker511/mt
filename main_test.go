@@ -38,6 +38,7 @@ func TestRun_InfoFlagsDoNotStartTUI(t *testing.T) {
 		"--keys":    "Trackpad / mouse",
 		"--help":    "mt --trust",
 		"--version": "mt ",
+		"--check":   "Config:",
 	} {
 		code, out, _, started, _ := cli(t, flag)
 		if code != 0 || started || !strings.Contains(out, want) {

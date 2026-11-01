@@ -7,6 +7,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 )
 
@@ -70,4 +71,36 @@ func Generate(ctx context.Context, cfg Config, systemPrompt, userMessage string)
 		return "", fmt.Errorf("%s: %w", provider, err)
 	}
 	return result, nil
+}
+
+// Describe returns a short description of the configured provider and where
+// it is reached, and a problem that would stop it working (or ""). It checks
+// the configuration only; it does not contact the provider.
+func Describe(cfg Config) (desc, problem string) {
+	provider := cfg.Provider
+	if provider == "" {
+		provider = "litellm"
+	}
+	if provider == "apple" {
+		path, err := findBridge(cfg)
+		if err != nil {
+			return "apple (on-device)", err.Error()
+		}
+		return "apple (on-device, " + path + ")", ""
+	}
+	baseURL, ok := defaultBaseURLs[provider]
+	if !ok {
+		return provider, fmt.Sprintf("unknown llm provider %q (use litellm, llamacpp, mlx, openai or apple)", provider)
+	}
+	if cfg.BaseURL != "" {
+		baseURL = cfg.BaseURL
+	}
+	desc = provider + " at " + baseURL
+	if _, err := url.ParseRequestURI(baseURL); err != nil {
+		return desc, fmt.Sprintf("invalid base_url %q", baseURL)
+	}
+	if provider == "openai" && cfg.APIKey == "" && os.Getenv("OPENAI_API_KEY") == "" {
+		return desc, "openai: no API key; set api_key in config or OPENAI_API_KEY env var"
+	}
+	return desc, ""
 }

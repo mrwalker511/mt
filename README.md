@@ -24,6 +24,7 @@ make build   # produces ./mt
 
 ```sh
 mt              # start
+mt --check      # check your config and setup without starting mt
 mt --keys       # print every keyboard and trackpad shortcut
 mt --trust      # let mt load ./mt.yaml in this folder (see Configuration)
 mt --version
@@ -135,6 +136,8 @@ llm:
 ---
 
 ## Configuration
+
+After editing your config (or upgrading mt), run `mt --check`. It loads the config exactly as mt does and lists anything that would get in your way: config errors with their line, an untrusted `./mt.yaml`, broken sequences, programs a target needs that aren't installed, missing `dir:` folders, and AI settings that can't work. It changes nothing.
 
 `mt` uses the first of these that exists:
 

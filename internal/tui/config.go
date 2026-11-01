@@ -181,6 +181,7 @@ type loadResult struct {
 	workspaces []Workspace
 	llm        llm.Config
 	notice     string
+	source     string // the config file loaded; "" for the built-in defaults
 }
 
 // LoadWorkspaces reads the first config file found in the search path and returns
@@ -240,7 +241,7 @@ func loadConfigFiles() (loadResult, error) {
 		if err := validateWorkspaces(workspaces); err != nil {
 			return defaults, err
 		}
-		return loadResult{workspaces: workspaces, llm: cfg.LLM, notice: notice}, nil
+		return loadResult{workspaces: workspaces, llm: cfg.LLM, notice: notice, source: p}, nil
 	}
 	return defaults, nil
 }
