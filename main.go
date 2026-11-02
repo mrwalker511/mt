@@ -17,6 +17,7 @@ const usage = `mt: a keyboard-driven terminal workspace launcher
 
 Usage:
   mt              start the launcher
+  mt --check      check your config and setup without starting mt
   mt --keys       print the keyboard and trackpad shortcuts
   mt --no-mouse   start without trackpad/mouse support, so the terminal's own
                   click-and-drag text selection works as usual
@@ -46,6 +47,8 @@ func run(args []string, stdout, stderr io.Writer, start func(mouse bool) error) 
 		case "--help", "-h", "help":
 			fmt.Fprint(stdout, usage)
 			return 0
+		case "--check", "check":
+			return tui.Check(stdout)
 		case "--version", "-v", "version":
 			fmt.Fprintln(stdout, "mt", resolveVersion())
 			return 0

@@ -232,6 +232,7 @@
     <li><a href="#config">Configuration</a>
       <ul>
         <li><a href="#config-locations">File locations</a></li>
+        <li><a href="#config-check">Checking your config</a></li>
         <li><a href="#config-trust">Folder trust</a></li>
         <li><a href="#config-structure">YAML structure</a></li>
         <li><a href="#config-run">Writing commands</a></li>
@@ -445,6 +446,21 @@ cp mt.yaml.example ~/Library/Application\ Support/mt/config.yaml
 # Linux
 mkdir -p ~/.config/mt
 cp mt.yaml.example ~/.config/mt/config.yaml</code></pre>
+
+<h3 id="config-check">Checking your config: <code>mt --check</code></h3>
+<p>Run <code>mt --check</code> after editing your config or upgrading mt. It loads the config exactly as mt would, without starting the interface or running anything, and reports:</p>
+<ul>
+  <li><strong>✓</strong> which config file was loaded, and how many workspaces, domains and targets it has;</li>
+  <li><strong>✗ problems:</strong> a config error (with file, line and suggestion) or a sequence with a missing, command-less or nested step;</li>
+  <li><strong>! warnings:</strong> an ignored <code>./mt.yaml</code> in an untrusted folder, a program a target or <code>live:</code> command needs that is not installed (grouped by program, e.g. <em>"docker" is not installed or not on your PATH (used by Docker Up, Docker Down)</em>), a <code>dir:</code> folder that does not exist, an AI provider setting that cannot work, and a <em>Context/Git</em> or <em>Infrastructure</em> domain that needs a <code>live:</code> line to keep its status header.</li>
+</ul>
+<pre><code>$ mt --check
+✓ Config: ~/Library/Application Support/mt/config.yaml
+  3 workspace(s), 9 domain(s), 31 target(s)
+✓ AI assistant: mlx at http://localhost:8000 (start it before pressing /)
+
+Ready: no problems found.</code></pre>
+<p>It exits with status 1 if there is a problem, so it can also guard a script or a dotfiles setup.</p>
 
 <h3 id="config-trust">Trusting a folder's <code>./mt.yaml</code></h3>
 <p>A <code>./mt.yaml</code> can run any command, so mt only loads one from a folder you have trusted, much like VS Code's workspace trust. Without that, cloning a repository and starting mt inside it could hand your keyboard to whoever wrote the repository's <code>mt.yaml</code>.</p>
@@ -931,6 +947,7 @@ llama-server -m ~/models/gemma-4-27b-it-Q4_K_M.gguf \
 <h2 id="troubleshoot">Troubleshooting <a class="anchor" href="#troubleshoot">#</a></h2>
 
 <h3>Config errors</h3>
+<p>Start with <code>mt --check</code>: it lists every problem below at once, without starting mt.</p>
 <table>
   <thead><tr><th>Error message</th><th>Cause</th><th>Fix</th></tr></thead>
   <tbody>

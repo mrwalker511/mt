@@ -354,7 +354,7 @@
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-body">
-      <div class="step-name">actions/checkout@v4</div>
+      <div class="step-name">actions/checkout@v5</div>
       <div class="step-desc">Clones the repository at the triggering commit into the runner workspace</div>
     </div>
   </div>
@@ -362,7 +362,7 @@
   <div class="step">
     <div class="step-num">2</div>
     <div class="step-body">
-      <div class="step-name">actions/setup-go@v5</div>
+      <div class="step-name">actions/setup-go@v6</div>
       <div class="step-desc">Installs the Go toolchain version declared in go.mod; restores module cache</div>
     </div>
   </div>
@@ -407,7 +407,7 @@
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-body">
-      <div class="step-name">actions/checkout@v4</div>
+      <div class="step-name">actions/checkout@v5</div>
       <div class="step-desc">Fresh clone on a separate runner: no shared state with the test job</div>
     </div>
   </div>
@@ -415,7 +415,7 @@
   <div class="step">
     <div class="step-num">2</div>
     <div class="step-body">
-      <div class="step-name">actions/setup-go@v5</div>
+      <div class="step-name">actions/setup-go@v6</div>
       <div class="step-desc">Same Go version as the test job (both read go.mod)</div>
     </div>
   </div>
@@ -448,12 +448,12 @@
 <!-- ── Step reference ─────────────────────────────────────────────────── -->
 <h2 id="steps">Step reference <a class="anchor" href="#steps">#</a></h2>
 
-<h3 id="step-checkout">actions/checkout@v4</h3>
+<h3 id="step-checkout">actions/checkout@v5</h3>
 <p>Provided by GitHub. Clones the repository into <code>/home/runner/work/mt/mt</code> at the SHA that triggered the workflow. For push events this is the pushed commit; for pull requests it is the merge commit of the PR head into the base branch.</p>
-<p>By default it makes a shallow clone (<code>fetch-depth: 1</code>), which is all a build needs.</p>
+<p>By default it makes a shallow clone (<code>fetch-depth: 1</code>), which is all a build needs. Both this action and <code>setup-go</code> are on the major versions that run on Node.js 24, as GitHub retires Node.js 20 for actions.</p>
 
-<h3 id="step-setup-go">actions/setup-go@v5</h3>
-<pre><code>- uses: actions/setup-go@v5
+<h3 id="step-setup-go">actions/setup-go@v6</h3>
+<pre><code>- uses: actions/setup-go@v6
   with:
     go-version-file: go.mod
     cache: true</code></pre>
@@ -545,7 +545,7 @@ git commit go.mod go.sum -m "chore: upgrade to Go 1.26.0"</code></pre>
 
 <!-- ── Dependency caching ──────────────────────────────────────────────── -->
 <h2 id="caching">Dependency caching <a class="anchor" href="#caching">#</a></h2>
-<p>With <code>cache: true</code> in <code>actions/setup-go@v5</code>, the action automatically saves and restores the Go module download cache (<code>$GOPATH/pkg/mod/cache</code>) between runs. The cache key is derived from the hash of <code>go.sum</code>.</p>
+<p>With <code>cache: true</code> in <code>actions/setup-go@v6</code>, the action automatically saves and restores the Go module download cache (<code>$GOPATH/pkg/mod/cache</code>) between runs. The cache key is derived from the hash of <code>go.sum</code>.</p>
 
 <table>
   <thead><tr><th>Scenario</th><th>Cache behaviour</th></tr></thead>
